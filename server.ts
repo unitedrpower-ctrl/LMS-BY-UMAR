@@ -62,6 +62,9 @@ export function isMasterOwnerEmail(email?: string): boolean {
 
 // Helper: Resolve Dynamic Domain Base URL (replaces hardcoded localhost:3000)
 export function getAppBaseUrl(req?: Request): string {
+  if (process.env.RENDER_EXTERNAL_URL && process.env.RENDER_EXTERNAL_URL.trim() !== '') {
+    return process.env.RENDER_EXTERNAL_URL.trim().replace(/\/+$/, '');
+  }
   if (process.env.PUBLIC_URL && process.env.PUBLIC_URL.trim() !== '') {
     return process.env.PUBLIC_URL.trim().replace(/\/+$/, '');
   }
@@ -70,25 +73,25 @@ export function getAppBaseUrl(req?: Request): string {
   }
 
   if (req) {
+    const forwardedHost = (req.headers['x-forwarded-host'] as string) || req.get('host');
+    const forwardedProto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
+    if (forwardedHost) {
+      return `${forwardedProto}://${forwardedHost}`.replace(/\/+$/, '');
+    }
+
     const origin = req.headers.origin as string;
-    if (origin && !origin.includes('localhost') && !origin.includes('127.0.0.1') && !origin.includes('0.0.0.0')) {
+    if (origin) {
       return origin.replace(/\/+$/, '');
     }
 
     const referer = req.headers.referer as string;
-    if (referer && !referer.includes('localhost') && !referer.includes('127.0.0.1') && !referer.includes('0.0.0.0')) {
+    if (referer) {
       try {
         const url = new URL(referer);
         return `${url.protocol}//${url.host}`;
       } catch {
         // ignore
       }
-    }
-
-    const forwardedProto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
-    const forwardedHost = (req.headers['x-forwarded-host'] as string) || req.get('host');
-    if (forwardedHost && !forwardedHost.includes('localhost') && !forwardedHost.includes('127.0.0.1') && !forwardedHost.includes('0.0.0.0')) {
-      return `${forwardedProto}://${forwardedHost}`.replace(/\/+$/, '');
     }
   }
 
