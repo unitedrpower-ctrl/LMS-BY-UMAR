@@ -1465,11 +1465,14 @@ System Administration • LMS by Umar`;
        companies.push(companyDetails);
     }
 
+    const invitedUser = users.find(u => u.email.toLowerCase() === inv!.email.toLowerCase() && u.companyId === inv!.companyId);
+
     return res.json({
       valid: true,
       invitation: inv,
       company: companyDetails,
-      email: inv.email
+      email: inv.email,
+      initialPassword: invitedUser?.loginPassword || ''
     });
   });
 

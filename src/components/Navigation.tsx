@@ -61,6 +61,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       roles: ['Owner', 'Super Admin', 'HR Admin'] 
     },
     { id: 'settings', label: t('settings', 'RBAC & Policies'), icon: Settings, roles: ['Owner', 'Super Admin', 'HR Admin'] },
+    { id: 'security', label: 'Security Options', icon: FolderLock, roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor', 'Labor'] },
     { id: 'express_backend', label: t('express_backend', 'Express Node API'), icon: Server, roles: ['Owner'] },
     { id: 'sql_workbench', label: 'SQL DB Schema', icon: Database, roles: ['Owner'] }
   ];

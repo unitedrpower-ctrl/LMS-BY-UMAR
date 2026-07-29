@@ -23,6 +23,7 @@ import { LoginRequestsView } from './components/views/LoginRequestsView';
 import { SqlSchemaView } from './components/views/SqlSchemaView';
 import { ExpressApiView } from './components/views/ExpressApiView';
 import { SettingsView } from './components/views/SettingsView';
+import { SecuritySettingsView } from './components/views/SecuritySettingsView';
 import { OwnerSaaSView } from './components/views/OwnerSaaSView';
 import { SubscriptionExpiredGuard } from './components/SubscriptionExpiredGuard';
 import { AuthModal } from './components/auth/AuthModal';
@@ -193,12 +194,12 @@ export default function App() {
     const isMaster = currentUser.role === 'Owner';
 
     if (currentUser.role === 'Labor') {
-      const allowedLaborTabs = ['dashboard', 'attendance', 'payroll', 'complaints', 'notices', 'documents'];
+      const allowedLaborTabs = ['dashboard', 'attendance', 'payroll', 'complaints', 'notices', 'documents', 'security'];
       if (!allowedLaborTabs.includes(activeTab)) {
         setActiveTab('dashboard');
       }
     } else if (currentUser.role === 'Site Supervisor') {
-      const allowedSupervisorTabs = ['dashboard', 'sites', 'attendance', 'payroll', 'complaints', 'notices', 'documents', 'express_backend'];
+      const allowedSupervisorTabs = ['dashboard', 'sites', 'attendance', 'payroll', 'complaints', 'notices', 'documents', 'security', 'express_backend'];
       if (!allowedSupervisorTabs.includes(activeTab)) {
         setActiveTab('dashboard');
       }
@@ -234,11 +235,13 @@ export default function App() {
     // Force navigation route according to role
     if (user.role === 'Owner') {
       setActiveTab('saas_owner');
-      window.location.hash = '#saas_owner';
+      window.history.replaceState({}, '', '/master-dashboard');
     } else if (user.role === 'Labor') {
       setActiveTab('dashboard');
+      window.history.replaceState({}, '', '/client-dashboard');
     } else {
       setActiveTab('dashboard');
+      window.history.replaceState({}, '', '/client-dashboard');
     }
 
     setIsAuthModalOpen(false);
@@ -577,6 +580,13 @@ export default function App() {
             users={users}
             onSaveUser={handleSaveUser}
             currentUser={currentUser}
+          />
+        );
+      case 'security':
+        return (
+          <SecuritySettingsView
+            currentUser={currentUser}
+            onUpdateUser={handleSaveUser}
           />
         );
       case 'express_backend':

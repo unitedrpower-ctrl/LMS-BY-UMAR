@@ -40,7 +40,11 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                         window.location.search.includes('master=true') || 
                         window.location.search.includes('owner=true');
 
-  const [activeTab, setActiveTab] = useState<'adminLogin' | 'workerLogin' | 'signUp' | 'masterOtp' | 'forgotPassword' | 'resetPassword'>('adminLogin');
+  const isClientRoute = window.location.pathname.includes('/client-login') || 
+                        window.location.pathname.includes('/client') ||
+                        window.location.search.includes('client=true');
+
+  const [activeTab, setActiveTab] = useState<'adminLogin' | 'workerLogin' | 'signUp' | 'masterOtp' | 'forgotPassword' | 'resetPassword'>(isClientRoute ? 'workerLogin' : 'adminLogin');
 
   // Form States
   const [emailOrSerial, setEmailOrSerial] = useState('');
@@ -115,6 +119,9 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
         .then(res => {
           if (res.valid && res.invitation) {
             setInvitationData(res.invitation);
+            if (res.initialPassword) {
+              setSignupPassword(res.initialPassword);
+            }
             setSuccessMessage(`🌟 Official Role Invitation Verified! Invited for email "${res.invitation.email}" as ${res.invitation.role}. Please complete the form below to claim!`);
           } else {
             setErrorMessage(`Invitation Error: ${res.error || 'Invalid or expired invitation link'}`);
@@ -878,7 +885,7 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-300 mb-1">Create Password *</label>
+                  <label className="block font-bold text-slate-300 mb-1">Confirm Initial Password *</label>
                   <input
                     type="password"
                     required
@@ -935,7 +942,7 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                   disabled={!invitationData}
                   className="w-full py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <CheckCircle2 className="w-4 h-4" /> Activate My Company Workspace
+                  <CheckCircle2 className="w-4 h-4" /> Activate & Sign In
                 </button>
 
                 <div className="pt-2 border-t border-slate-800 flex justify-center">
