@@ -1239,7 +1239,12 @@ Platform Administration • LMS by Umar`;
         userData.status = 'Active';
         userData.profileCompleted = true;
       } else {
-        userData.status = 'Pending';
+        if (inviteToken || userData.companyId) {
+          userData.status = 'Active';
+          userData.profileCompleted = true;
+        } else {
+          userData.status = 'Pending';
+        }
       }
     }
 
@@ -1247,37 +1252,26 @@ Platform Administration • LMS by Umar`;
     const existingIndex = users.findIndex(u => u.email.toLowerCase() === userData.email.toLowerCase());
     if (existingIndex >= 0) {
       const existing = users[existingIndex];
-      if (matchingInv) {
-        // Upgrade existing user with invitation details
-        existing.companyId = userData.companyId;
-        existing.role = userData.role;
-        existing.status = 'Active';
-        existing.profileCompleted = true;
-        if (userData.loginPassword) {
-          existing.loginPassword = userData.loginPassword;
-        }
-        matchingInv.acceptedUserId = existing.id;
-        return res.status(200).json({ success: true, user: existing, message: `🎉 Workspace registration complete! Assigned '${matchingInv.role}' access.` });
-      } else {
-        if (existing.status === 'Active') {
-          return res.status(400).json({ error: 'An active account with this email address already exists.' });
-        } else if (existing.status === 'Pending') {
-          return res.status(200).json(existing);
-        }
+      // Upgrade existing user with invitation / registration details
+      existing.companyId = userData.companyId || existing.companyId;
+      existing.role = userData.role || existing.role;
+      existing.status = 'Active';
+      existing.profileCompleted = true;
+      if (userData.name) existing.name = userData.name;
+      if (userData.loginPassword) {
+        existing.loginPassword = userData.loginPassword;
       }
-    }
-
-    // Automatically secure pass on new manual creation if plain-text password is provided
-    if (userData.loginPassword && !userData.loginPassword.startsWith('$2b$10$')) {
-      // Just keep it simple as plain text since client verifies it literally or has mock passwords
+      if (matchingInv) {
+        matchingInv.acceptedUserId = existing.id;
+      }
+      return res.status(200).json({ success: true, user: existing, message: `🎉 Workspace registration complete! Assigned '${existing.role}' access.` });
     }
 
     users.push(userData);
     if (matchingInv) {
       matchingInv.acceptedUserId = userData.id;
-      return res.status(201).json({ success: true, user: userData, message: `🎉 Workspace registration complete! Assigned '${matchingInv.role}' access.` });
     }
-    res.status(201).json(userData);
+    return res.status(201).json({ success: true, user: userData, message: `🎉 Workspace registration complete! Assigned '${userData.role}' access.` });
   });
 
   // ==========================================
