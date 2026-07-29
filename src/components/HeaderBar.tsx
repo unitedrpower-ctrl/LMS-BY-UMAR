@@ -60,7 +60,6 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const [showPwaModal, setShowPwaModal] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
-  const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -139,19 +138,12 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           {/* App Logo & Prominent Name */}
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-slate-950 overflow-hidden flex items-center justify-center shadow-md flex-shrink-0 border border-amber-500/30">
-              {!imgError ? (
-                <img 
-                  src="/lms_umar_logo_1785237060471.jpg" 
-                  alt="LMS by Umar Logo" 
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                  onError={() => setImgError(true)}
-                />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-indigo-900 to-slate-950 flex items-center justify-center text-amber-400 font-black text-xs">
-                  LMS
-                </div>
-              )}
+              <img 
+                src="/lms_umar_logo_1785237060471.jpg" 
+                alt="LMS by Umar Logo" 
+                className="h-10 w-auto object-contain max-h-12 w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
             </div>
             <div className="min-w-0">
               <h1 className="font-extrabold text-base sm:text-lg tracking-tight leading-tight truncate text-slate-100 flex items-center gap-1.5">
