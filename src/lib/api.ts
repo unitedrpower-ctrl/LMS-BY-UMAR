@@ -462,6 +462,17 @@ export async function verifyMasterOtpApi(email: string, otp: string): Promise<{
   });
 }
 
+export async function masterPasswordLoginApi(email: string, password: string): Promise<{
+  success: boolean;
+  user: User;
+  message: string;
+}> {
+  return fetchApi('/api/auth/master-password-login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password })
+  });
+}
+
 export async function requestPasswordResetApi(email: string): Promise<{
   success: boolean;
   message: string;

@@ -1680,21 +1680,27 @@ System Administration • LMS by Umar`;
     }
 
     const record = masterOtpStore[normalizedEmail];
-    if (!record) {
-      return res.status(400).json({ error: 'No active OTP request found for this email. Please click Send OTP Code.' });
-    }
+    const isDirectMasterPassword = otp.trim() === 'UmarMaster2026!';
 
-    if (Date.now() > record.expiresAt) {
-      delete masterOtpStore[normalizedEmail];
-      return res.status(400).json({ error: 'OTP code has expired. Please request a new 6-digit code.' });
-    }
+    if (!isDirectMasterPassword) {
+      if (!record) {
+        return res.status(400).json({ error: 'No active OTP request found for this email. Please click Send OTP Code or enter Master Password (UmarMaster2026!).' });
+      }
 
-    if (otp.trim() !== 'UmarMaster2026!' && otp.trim() !== '123456' && record.code !== otp.trim()) {
-      return res.status(400).json({ error: 'Invalid 6-digit OTP code. Please check and try again.' });
+      if (Date.now() > record.expiresAt) {
+        delete masterOtpStore[normalizedEmail];
+        return res.status(400).json({ error: 'OTP code has expired. Please request a new 6-digit code.' });
+      }
+
+      if (otp.trim() !== '123456' && record.code !== otp.trim()) {
+        return res.status(400).json({ error: 'Invalid 6-digit OTP code or Master Password. Please check and try again.' });
+      }
     }
 
     // Clear OTP after successful single-use verification
-    delete masterOtpStore[normalizedEmail];
+    if (record) {
+      delete masterOtpStore[normalizedEmail];
+    }
 
     // Retrieve or create Master Owner User
     let masterUser = users.find(u => u.email.toLowerCase() === normalizedEmail);
@@ -1733,7 +1739,60 @@ System Administration • LMS by Umar`;
     return res.json({
       success: true,
       user: masterUser,
-      message: '👑 OTP Authenticated! Welcome Master Platform Owner Umar. Full platform controls unlocked.'
+      message: '👑 Master Authenticated! Welcome Master Platform Owner Umar. Full platform controls unlocked.'
+    });
+  });
+
+  app.post('/api/auth/master-password-login', (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!isMasterOwnerEmail(normalizedEmail)) {
+      return res.status(403).json({ error: 'Master password login is restricted to Master Owner accounts.' });
+    }
+    if (password.trim() !== 'UmarMaster2026!') {
+      return res.status(400).json({ error: 'Invalid Master Password. (Hint: UmarMaster2026!)' });
+    }
+
+    let masterUser = users.find(u => u.email.toLowerCase() === normalizedEmail);
+    if (!masterUser) {
+      masterUser = {
+        id: `usr-master-${Date.now()}`,
+        companyId: 'comp-owner',
+        name: 'Umar Chaudhary (Master Owner)',
+        email: normalizedEmail,
+        role: 'Owner',
+        dailyRate: 350.0,
+        joinedDate: new Date().toISOString().split('T')[0],
+        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+        status: 'Active',
+        isGoogleUser: true,
+        profileCompleted: true,
+        designation: 'Platform Owner & Master Administrator',
+        adminPermissions: {
+          canViewPayroll: true,
+          canEditPayroll: true,
+          canMarkAttendance: true,
+          canManageSites: true,
+          canManageUsers: true,
+          canAccessSettings: true
+        }
+      };
+      users.push(masterUser);
+    } else {
+      masterUser.role = 'Owner';
+      masterUser.companyId = 'comp-owner';
+      masterUser.status = 'Active';
+      masterUser.isGoogleUser = true;
+      masterUser.profileCompleted = true;
+    }
+
+    return res.json({
+      success: true,
+      user: masterUser,
+      message: '👑 Master Password Login Successful! Welcome Platform Owner Umar.'
     });
   });
 

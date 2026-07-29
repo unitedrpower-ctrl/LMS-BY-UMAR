@@ -92,6 +92,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {currentUser.role !== 'Labor' && (
           <div className="flex flex-wrap items-center gap-2">
             <button
+              onClick={() => {
+                const workerLink = `${window.location.origin}/`;
+                navigator.clipboard.writeText(workerLink);
+                alert(`📋 Worker Login Link Copied to Clipboard!\n\nShare this link with your workforce:\n${workerLink}\n\nWorkers can log in directly using their assigned Login Serial Number and Access Password.`);
+              }}
+              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            >
+              <HardHat className="w-4 h-4 text-emerald-200" />
+              Copy Worker Login Link
+            </button>
+            <button
               onClick={() => setActiveTab('sql_workbench')}
               className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all"
             >

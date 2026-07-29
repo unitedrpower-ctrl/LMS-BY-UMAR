@@ -691,20 +691,30 @@ export const UsersView: React.FC<UsersViewProps> = ({
                 </div>
               </div>
 
-              {/* Generated Portal Credentials Banner */}
-              <div className="p-3 bg-slate-900 text-slate-200 rounded-xl space-y-1 text-[11px] font-mono">
-                <span className="text-[10px] text-amber-400 font-bold uppercase block tracking-wider">Auto-Generated Worker Portal Credentials</span>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Login Serial Number:</span>
-                  <span className="text-emerald-400 font-bold">
-                    {editingUser.loginSerial || `EMP-${Math.floor(1000 + Math.random() * 9000)}`}
-                  </span>
+              {/* Editable Portal Credentials */}
+              <div className="p-3 bg-slate-900 text-slate-200 rounded-xl space-y-2 text-[11px] font-mono">
+                <span className="text-[10px] text-amber-400 font-bold uppercase block tracking-wider">Worker Portal Credentials (Manual & Custom Entry)</span>
+                <div>
+                  <label className="block text-slate-400 text-[10px] mb-0.5">Login Serial Number *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingUser.loginSerial || `EMP-${Math.floor(1000 + Math.random() * 9000)}`}
+                    onChange={(e) => setEditingUser({ ...editingUser, loginSerial: e.target.value })}
+                    className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-emerald-400 font-bold font-mono focus:outline-none focus:border-emerald-500"
+                    placeholder="e.g. EMP-1001 or W-501"
+                  />
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400">Portal Password:</span>
-                  <span className="text-indigo-300 font-bold">
-                    {editingUser.loginPassword || `Pass#${Math.floor(1000 + Math.random() * 9000)}`}
-                  </span>
+                <div>
+                  <label className="block text-slate-400 text-[10px] mb-0.5">Access Password *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingUser.loginPassword || `Pass#${Math.floor(1000 + Math.random() * 9000)}`}
+                    onChange={(e) => setEditingUser({ ...editingUser, loginPassword: e.target.value })}
+                    className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-indigo-300 font-bold font-mono focus:outline-none focus:border-indigo-500"
+                    placeholder="e.g. Pass#1234 or secure word"
+                  />
                 </div>
               </div>
 

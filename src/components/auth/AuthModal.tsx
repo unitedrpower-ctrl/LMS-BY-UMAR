@@ -17,7 +17,7 @@ import {
   Crown,
   RefreshCw
 } from 'lucide-react';
-import { requestMasterOtpApi, verifyMasterOtpApi } from '../../lib/api';
+import { requestMasterOtpApi, verifyMasterOtpApi, masterPasswordLoginApi } from '../../lib/api';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -479,6 +479,51 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </button>
               </form>
             )}
+
+            {/* Direct Master Password Login Section */}
+            <div className="pt-4 border-t border-slate-800 space-y-2">
+              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">Or Sign In with Master Password</span>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                setErrorMessage('');
+                setSuccessMessage('');
+                try {
+                  const res = await masterPasswordLoginApi(otpEmail.trim() || 'umarchoudhary259@gmail.com', otpCode.trim() || 'UmarMaster2026!');
+                  if (res.success && res.user) {
+                    const authToken = `master-jwt-token-${res.user.id}-${Date.now()}`;
+                    localStorage.setItem('lms_auth_token', authToken);
+                    localStorage.setItem('lms_current_user_id', res.user.id);
+                    localStorage.setItem('lms_user_role', 'Owner');
+                    localStorage.setItem('lms_user_email', res.user.email);
+                    localStorage.setItem('labor_admin_current_user_id_v1', JSON.stringify(res.user.id));
+                    setSuccessMessage('👑 Master Password Login Successful! Redirecting...');
+                    onLogin({ ...res.user, role: 'Owner', companyId: 'comp-owner', status: 'Active', profileCompleted: true });
+                    onClose();
+                    if (window.location.hash !== '#saas_owner') {
+                      window.location.hash = '#saas_owner';
+                    }
+                  } else {
+                    setErrorMessage(res.message || 'Invalid Master Password.');
+                  }
+                } catch (err: any) {
+                  setErrorMessage(err.message || 'Master Password login failed.');
+                }
+              }} className="space-y-2">
+                <input
+                  type="password"
+                  placeholder="Master Password (e.g. UmarMaster2026!)"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value)}
+                  className="w-full bg-slate-950 border border-amber-500/50 rounded-xl px-3 py-2 text-white font-mono text-xs placeholder-slate-600 focus:outline-none focus:border-amber-400 font-bold"
+                />
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-black rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <KeyRound className="w-4 h-4 text-white" /> Sign In with Master Password
+                </button>
+              </form>
+            </div>
           </div>
         )}
 
