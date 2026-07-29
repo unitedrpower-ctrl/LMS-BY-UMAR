@@ -279,9 +279,13 @@ export async function revokeInvitationApi(id: string, currentUser?: User): Promi
   }, currentUser);
 }
 
-export async function validateInvitationApi(token: string, company?: string): Promise<{ valid: boolean; invitation?: RoleInvitation; error?: string; company?: Company; initialPassword?: string }> {
+export async function validateInvitationApi(token: string, company?: string): Promise<{ valid: boolean; invitation?: RoleInvitation; error?: string; company?: Company; companyName?: string; email?: string; initialPassword?: string }> {
   const companyQuery = company ? `&company=${encodeURIComponent(company)}` : '';
-  return fetchApi<{ valid: boolean; invitation?: RoleInvitation; error?: string; company?: Company; initialPassword?: string }>(`/api/verify-invite?token=${encodeURIComponent(token)}${companyQuery}`);
+  try {
+    return await fetchApi<{ valid: boolean; invitation?: RoleInvitation; error?: string; company?: Company; companyName?: string; email?: string; initialPassword?: string }>(`/api/invitation/verify?token=${encodeURIComponent(token)}${companyQuery}`);
+  } catch {
+    return await fetchApi<{ valid: boolean; invitation?: RoleInvitation; error?: string; company?: Company; companyName?: string; email?: string; initialPassword?: string }>(`/api/verify-invite?token=${encodeURIComponent(token)}${companyQuery}`);
+  }
 }
 
 export async function googleAuthApi(data: {
