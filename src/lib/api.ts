@@ -395,6 +395,12 @@ export async function suspendCompanyApi(id: string, currentUser?: User): Promise
   }, currentUser);
 }
 
+export async function purgeCompanyApi(id: string, currentUser?: User): Promise<{ success: boolean; message: string }> {
+  return fetchApi(`/api/owner/companies/${id}/purge`, {
+    method: 'DELETE'
+  }, currentUser);
+}
+
 export async function generateDemoLinkApi(data: {
   clientName: string;
   clientEmail: string;

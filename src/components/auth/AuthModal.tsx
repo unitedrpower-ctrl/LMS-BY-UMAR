@@ -34,6 +34,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onLogin,
   onSignUp
 }) => {
+  const isMasterRoute = window.location.pathname.includes('/master-login') || 
+                        window.location.pathname.includes('/master') ||
+                        window.location.search.includes('master=true') || 
+                        window.location.search.includes('owner=true');
+
   const [activeTab, setActiveTab] = useState<'adminLogin' | 'workerLogin' | 'signUp' | 'masterOtp'>('adminLogin');
 
   // Form States
@@ -308,21 +313,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </div>
 
         {/* Tab Switcher */}
-        <div className="grid grid-cols-4 gap-1 bg-slate-950/80 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold">
-          <button
-            onClick={() => {
-              setActiveTab('masterOtp');
-              setErrorMessage('');
-              setSuccessMessage('');
-            }}
-            className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
-              activeTab === 'masterOtp'
-                ? 'bg-gradient-to-r from-amber-600 to-yellow-600 text-white shadow-md font-black'
-                : 'text-amber-400 hover:text-amber-200'
-            }`}
-          >
-            <Crown className="w-3.5 h-3.5 text-amber-200" /> Owner OTP
-          </button>
+        <div className={`grid ${isMasterRoute ? 'grid-cols-4' : 'grid-cols-3'} gap-1 bg-slate-950/80 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold`}>
+          {isMasterRoute && (
+            <button
+              onClick={() => {
+                setActiveTab('masterOtp');
+                setErrorMessage('');
+                setSuccessMessage('');
+              }}
+              className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                activeTab === 'masterOtp'
+                  ? 'bg-gradient-to-r from-amber-600 to-yellow-600 text-white shadow-md font-black'
+                  : 'text-amber-400 hover:text-amber-200'
+              }`}
+            >
+              <Crown className="w-3.5 h-3.5 text-amber-200" /> Owner OTP
+            </button>
+          )}
 
           <button
             onClick={() => {

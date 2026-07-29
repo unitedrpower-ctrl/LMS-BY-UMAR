@@ -33,7 +33,8 @@ import {
   onboardCompanyApi, 
   updateCompanySubscriptionApi, 
   suspendCompanyApi,
-  generateDemoLinkApi
+  generateDemoLinkApi,
+  purgeCompanyApi
 } from '../../lib/api';
 
 interface OwnerSaaSViewProps {
@@ -239,6 +240,17 @@ export const OwnerSaaSView: React.FC<OwnerSaaSViewProps> = ({ currentUser }) => 
       await loadData();
     } catch (err: any) {
       setStatusMsg({ type: 'error', text: err.message || 'Failed to suspend company.' });
+    }
+  };
+
+  const handlePurge = async (comp: Company) => {
+    if (!confirm(`⚠️ WARNING: Are you absolutely sure you want to PERMANENTLY DELETE & PURGE "${comp.name}"? This will irreversibly erase the company, all sites, all users, attendance logs, and payroll records. This action cannot be undone.`)) return;
+    try {
+      await purgeCompanyApi(comp.id, currentUser);
+      setStatusMsg({ type: 'success', text: `🗑️ Company ${comp.name} and all associated data purged permanently.` });
+      await loadData();
+    } catch (err: any) {
+      setStatusMsg({ type: 'error', text: err.message || 'Failed to purge company.' });
     }
   };
 
@@ -615,13 +627,23 @@ export const OwnerSaaSView: React.FC<OwnerSaaSViewProps> = ({ currentUser }) => 
                           </button>
 
                           {comp.id !== 'comp-owner' && (
-                            <button
-                              onClick={() => handleSuspend(comp)}
-                              className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer"
-                              title="Suspend company access"
-                            >
-                              <Slash className="w-3 h-3" /> Suspend
-                            </button>
+                            <>
+                              <button
+                                onClick={() => handleSuspend(comp)}
+                                className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                                title="Suspend company access"
+                              >
+                                <Slash className="w-3 h-3" /> Suspend
+                              </button>
+
+                              <button
+                                onClick={() => handlePurge(comp)}
+                                className="px-2.5 py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/40 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                                title="Permanently Purge & Delete Company Data"
+                              >
+                                <AlertTriangle className="w-3 h-3" /> Purge
+                              </button>
+                            </>
                           )}
                         </div>
                       </td>

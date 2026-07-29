@@ -29,6 +29,28 @@ let payrolls: Payroll[] = [...INITIAL_PAYROLLS];
 let complaints: Complaint[] = [...INITIAL_COMPLAINTS];
 let notices: Notice[] = [...INITIAL_NOTICES];
 let roleInvitations: RoleInvitation[] = [...INITIAL_INVITATIONS];
+
+// Ensure all pre-existing and initial companies have a valid invitationToken and corresponding invitation record
+companies.forEach(comp => {
+  if (!comp.invitationToken) {
+    comp.invitationToken = `inv-tok-${comp.id.replace('comp-', '')}`;
+  }
+  const existingInv = roleInvitations.find(i => i.companyId === comp.id && i.email.toLowerCase() === comp.adminEmail.toLowerCase());
+  if (!existingInv) {
+    roleInvitations.push({
+      id: `inv-auto-${comp.id}`,
+      companyId: comp.id,
+      email: comp.adminEmail,
+      role: 'Super Admin',
+      token: comp.invitationToken,
+      invitedBy: 'Platform Owner',
+      createdAt: comp.createdAt || new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      status: 'Pending'
+    });
+  }
+});
+
 let masterOtpStore: Record<string, { code: string; expiresAt: number }> = {};
 
 // Helper: Master Owner Check for umarchoudhary259@gmail.com / umarchaudhary259@gmail.com / unitedrpower@gmail.com
@@ -860,6 +882,34 @@ async function startServer() {
     });
   });
 
+  // Owner Master: Purge / Hard Delete / Permanent Deletion of a Company and all of its tenant records
+  app.delete('/api/owner/companies/:id/purge', (req: AuthenticatedRequest, res) => {
+    if (req.userRole !== 'Owner') {
+      return res.status(403).json({ error: 'Forbidden: Master Owner access required to purge companies.' });
+    }
+
+    const { id } = req.params;
+    const company = companies.find(c => c.id === id);
+    if (!company) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    // Filter out all associated tenant data
+    companies = companies.filter(c => c.id !== id);
+    users = users.filter(u => u.companyId !== id);
+    sites = sites.filter(s => s.companyId !== id);
+    attendanceRecords = attendanceRecords.filter(a => a.companyId !== id);
+    payrolls = payrolls.filter(p => p.companyId !== id);
+    complaints = complaints.filter(c => c.companyId !== id);
+    notices = notices.filter(n => n.companyId !== id);
+    roleInvitations = roleInvitations.filter(r => r.companyId !== id);
+
+    res.json({
+      success: true,
+      message: `Company "${company.name}" and all of its associated users, sites, payroll, and logs have been permanently purged from the database.`
+    });
+  });
+
   app.post('/api/owner/companies/:id/suspend', (req: AuthenticatedRequest, res) => {
     if (req.userRole !== 'Owner') {
       return res.status(403).json({ error: 'Forbidden: Master Owner access required' });
@@ -1325,20 +1375,25 @@ System Administration • LMS by Umar`;
 
   // Robust Token Verification endpoint supporting both paths and query params
   app.get('/api/verify-invite', (req, res) => {
-    const token = (req.query.token as string || req.query.inviteToken as string || '');
-    const companyId = (req.query.company as string || req.query.companyId as string || '');
+    const token = (req.query.token as string || req.query.inviteToken as string || '').trim();
+    const companyId = (req.query.company as string || req.query.companyId as string || '').trim();
 
     if (!token) {
       return res.status(400).json({ valid: false, error: 'Invitation Error: Token is required.' });
     }
 
     // 1. Find in roleInvitations
-    let inv = roleInvitations.find(i => i.token === token);
+    let inv = roleInvitations.find(i => i.token === token || i.id === token);
 
     // 2. Fallback: Find in company record
-    if (!inv && companyId) {
-      const comp = companies.find(c => c.id === companyId || c.id.toLowerCase() === companyId.toLowerCase() || (c.invitationToken && c.invitationToken === token));
-      if (comp && comp.invitationToken === token) {
+    if (!inv) {
+      const comp = companies.find(c => 
+        (c.invitationToken && c.invitationToken === token) || 
+        c.id === token || 
+        token.includes(c.id) ||
+        (companyId && (c.id === companyId || c.id.toLowerCase() === companyId.toLowerCase()))
+      );
+      if (comp) {
         inv = roleInvitations.find(i => i.companyId === comp.id && i.email.toLowerCase() === comp.adminEmail.toLowerCase());
         if (!inv) {
           inv = {
@@ -1346,7 +1401,7 @@ System Administration • LMS by Umar`;
             companyId: comp.id,
             email: comp.adminEmail,
             role: 'Super Admin',
-            token: token,
+            token: comp.invitationToken || token,
             invitedBy: 'Platform Owner',
             createdAt: comp.createdAt || new Date().toISOString(),
             expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -1384,13 +1439,18 @@ System Administration • LMS by Umar`;
 
   app.get('/api/invitations/validate/:token', (req, res) => {
     const { token } = req.params;
-    const companyId = (req.query.company as string || req.query.companyId as string || '');
+    const companyId = (req.query.company as string || req.query.companyId as string || '').trim();
     
-    let inv = roleInvitations.find(i => i.token === token);
+    let inv = roleInvitations.find(i => i.token === token || i.id === token);
 
-    if (!inv && companyId) {
-      const comp = companies.find(c => c.id === companyId || c.id.toLowerCase() === companyId.toLowerCase() || (c.invitationToken && c.invitationToken === token));
-      if (comp && comp.invitationToken === token) {
+    if (!inv) {
+      const comp = companies.find(c => 
+        (c.invitationToken && c.invitationToken === token) || 
+        c.id === token || 
+        token.includes(c.id) ||
+        (companyId && (c.id === companyId || c.id.toLowerCase() === companyId.toLowerCase()))
+      );
+      if (comp) {
         inv = roleInvitations.find(i => i.companyId === comp.id && i.email.toLowerCase() === comp.adminEmail.toLowerCase());
         if (!inv) {
           inv = {
@@ -1398,7 +1458,7 @@ System Administration • LMS by Umar`;
             companyId: comp.id,
             email: comp.adminEmail,
             role: 'Super Admin',
-            token: token,
+            token: comp.invitationToken || token,
             invitedBy: 'Platform Owner',
             createdAt: comp.createdAt || new Date().toISOString(),
             expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),

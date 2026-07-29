@@ -35,6 +35,11 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
   onSignUp,
   onRefreshUsers
 }) => {
+  const isMasterRoute = window.location.pathname.includes('/master-login') || 
+                        window.location.pathname.includes('/master') ||
+                        window.location.search.includes('master=true') || 
+                        window.location.search.includes('owner=true');
+
   const [activeTab, setActiveTab] = useState<'adminLogin' | 'workerLogin' | 'signUp' | 'masterOtp' | 'forgotPassword' | 'resetPassword'>('adminLogin');
 
   // Form States
@@ -971,71 +976,73 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
             <>
               {/* Tab Selector Switcher */}
               {activeTab !== 'forgotPassword' && activeTab !== 'resetPassword' && (
-                <div className="grid grid-cols-4 gap-1 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold">
-              <button
-                id="tab-btn-master-otp"
-                onClick={() => {
-                  setActiveTab('masterOtp');
-                  setErrorMessage('');
-                  setSuccessMessage('');
-                }}
-                className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                  activeTab === 'masterOtp'
-                    ? 'bg-gradient-to-r from-amber-600 to-yellow-600 text-white shadow-md font-black'
-                    : 'text-amber-400 hover:text-amber-200 hover:bg-slate-900'
-                }`}
-              >
-                <Crown className="w-3.5 h-3.5 text-amber-200" /> Owner OTP
-              </button>
+                <div className={`grid ${isMasterRoute ? 'grid-cols-4' : 'grid-cols-3'} gap-1 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold`}>
+                  {isMasterRoute && (
+                    <button
+                      id="tab-btn-master-otp"
+                      onClick={() => {
+                        setActiveTab('masterOtp');
+                        setErrorMessage('');
+                        setSuccessMessage('');
+                      }}
+                      className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                        activeTab === 'masterOtp'
+                          ? 'bg-gradient-to-r from-amber-600 to-yellow-600 text-white shadow-md font-black'
+                          : 'text-amber-400 hover:text-amber-200 hover:bg-slate-900'
+                      }`}
+                    >
+                      <Crown className="w-3.5 h-3.5 text-amber-200" /> Owner OTP
+                    </button>
+                  )}
 
-              <button
-                id="tab-btn-admin-login"
-                onClick={() => {
-                  setActiveTab('adminLogin');
-                  setErrorMessage('');
-                  setSuccessMessage('');
-                }}
-                className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                  activeTab === 'adminLogin'
-                    ? 'bg-indigo-600 text-white shadow-md font-extrabold'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                }`}
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-indigo-200" /> Admin
-              </button>
+                  <button
+                    id="tab-btn-admin-login"
+                    onClick={() => {
+                      setActiveTab('adminLogin');
+                      setErrorMessage('');
+                      setSuccessMessage('');
+                    }}
+                    className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                      activeTab === 'adminLogin'
+                        ? 'bg-indigo-600 text-white shadow-md font-extrabold'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                    }`}
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-indigo-200" /> Admin
+                  </button>
 
-              <button
-                id="tab-btn-worker-login"
-                onClick={() => {
-                  setActiveTab('workerLogin');
-                  setErrorMessage('');
-                  setSuccessMessage('');
-                }}
-                className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                  activeTab === 'workerLogin'
-                    ? 'bg-amber-600 text-white shadow-md font-extrabold'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                }`}
-              >
-                <HardHat className="w-3.5 h-3.5 text-amber-200" /> Worker
-              </button>
+                  <button
+                    id="tab-btn-worker-login"
+                    onClick={() => {
+                      setActiveTab('workerLogin');
+                      setErrorMessage('');
+                      setSuccessMessage('');
+                    }}
+                    className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                      activeTab === 'workerLogin'
+                        ? 'bg-amber-600 text-white shadow-md font-extrabold'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                    }`}
+                  >
+                    <HardHat className="w-3.5 h-3.5 text-amber-200" /> Worker
+                  </button>
 
-              <button
-                id="tab-btn-signup"
-                onClick={() => {
-                  setActiveTab('signUp');
-                  setErrorMessage('');
-                  setSuccessMessage('');
-                }}
-                className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                  activeTab === 'signUp'
-                    ? 'bg-emerald-600 text-white shadow-md font-extrabold'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                }`}
-              >
-                <UserPlus className="w-3.5 h-3.5 text-emerald-200" /> Sign Up
-              </button>
-            </div>
+                  <button
+                    id="tab-btn-signup"
+                    onClick={() => {
+                      setActiveTab('signUp');
+                      setErrorMessage('');
+                      setSuccessMessage('');
+                    }}
+                    className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                      activeTab === 'signUp'
+                        ? 'bg-emerald-600 text-white shadow-md font-extrabold'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                    }`}
+                  >
+                    <UserPlus className="w-3.5 h-3.5 text-emerald-200" /> Sign Up
+                  </button>
+                </div>
               )}
 
             {/* Status Alerts */}
@@ -1218,21 +1225,25 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
               <UserCheck className="w-4 h-4" /> Log In as Admin / Staff
             </button>
 
-            <div className="relative flex py-1 items-center">
-              <div className="flex-grow border-t border-slate-800"></div>
-              <span className="flex-shrink mx-3 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Or securely connect</span>
-              <div className="flex-grow border-t border-slate-800"></div>
-            </div>
+            {isMasterRoute && (
+              <>
+                <div className="relative flex py-1 items-center">
+                  <div className="flex-grow border-t border-slate-800"></div>
+                  <span className="flex-shrink mx-3 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Or securely connect</span>
+                  <div className="flex-grow border-t border-slate-800"></div>
+                </div>
 
-            <button
-              type="button"
-              id="btn-admin-continue-with-google"
-              onClick={() => setShowGoogleMockSelect(true)}
-              className="w-full py-2.5 bg-white hover:bg-slate-100 text-slate-950 font-extrabold rounded-xl text-xs shadow-md border border-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-4 h-4" />
-              <span>Continue with Google</span>
-            </button>
+                <button
+                  type="button"
+                  id="btn-admin-continue-with-google"
+                  onClick={() => setShowGoogleMockSelect(true)}
+                  className="w-full py-2.5 bg-white hover:bg-slate-100 text-slate-950 font-extrabold rounded-xl text-xs shadow-md border border-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-4 h-4" />
+                  <span>Continue with Google</span>
+                </button>
+              </>
+            )}
           </form>
         )}
 
@@ -1277,21 +1288,25 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
               <HardHat className="w-4 h-4" /> Access Worker Portal
             </button>
 
-            <div className="relative flex py-2 items-center">
-              <div className="flex-grow border-t border-slate-800"></div>
-              <span className="flex-shrink mx-4 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Or securely connect</span>
-              <div className="flex-grow border-t border-slate-800"></div>
-            </div>
+            {isMasterRoute && (
+              <>
+                <div className="relative flex py-2 items-center">
+                  <div className="flex-grow border-t border-slate-800"></div>
+                  <span className="flex-shrink mx-4 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Or securely connect</span>
+                  <div className="flex-grow border-t border-slate-800"></div>
+                </div>
 
-            <button
-              type="button"
-              id="btn-continue-with-google"
-              onClick={() => setShowGoogleMockSelect(true)}
-              className="w-full py-3 bg-white hover:bg-slate-100 text-slate-950 font-extrabold rounded-xl text-xs shadow-md border border-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-4 h-4" />
-              <span>Continue with Google</span>
-            </button>
+                <button
+                  type="button"
+                  id="btn-continue-with-google"
+                  onClick={() => setShowGoogleMockSelect(true)}
+                  className="w-full py-3 bg-white hover:bg-slate-100 text-slate-950 font-extrabold rounded-xl text-xs shadow-md border border-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-4 h-4" />
+                  <span>Continue with Google</span>
+                </button>
+              </>
+            )}
           </form>
         )}
 
@@ -1351,21 +1366,25 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
               <UserPlus className="w-4 h-4" /> Submit Registration (Pending Approval)
             </button>
 
-            <div className="relative flex py-1 items-center">
-              <div className="flex-grow border-t border-slate-800"></div>
-              <span className="flex-shrink mx-3 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Or Instant Google Signup</span>
-              <div className="flex-grow border-t border-slate-800"></div>
-            </div>
+            {isMasterRoute && (
+              <>
+                <div className="relative flex py-1 items-center">
+                  <div className="flex-grow border-t border-slate-800"></div>
+                  <span className="flex-shrink mx-3 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Or Instant Google Signup</span>
+                  <div className="flex-grow border-t border-slate-800"></div>
+                </div>
 
-            <button
-              type="button"
-              id="btn-signup-with-google"
-              onClick={() => setShowGoogleMockSelect(true)}
-              className="w-full py-3 bg-white hover:bg-slate-100 text-slate-950 font-extrabold rounded-xl text-xs shadow-md border border-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-4 h-4" />
-              <span>Sign Up with Google (Captures Name & Email Only)</span>
-            </button>
+                <button
+                  type="button"
+                  id="btn-signup-with-google"
+                  onClick={() => setShowGoogleMockSelect(true)}
+                  className="w-full py-3 bg-white hover:bg-slate-100 text-slate-950 font-extrabold rounded-xl text-xs shadow-md border border-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-4 h-4" />
+                  <span>Sign Up with Google (Captures Name & Email Only)</span>
+                </button>
+              </>
+            )}
           </form>
         )}
 
