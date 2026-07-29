@@ -70,7 +70,7 @@ export const Navigation: React.FC<NavigationProps> = ({
 
   return (
     <nav id="app-main-navigation" className="bg-slate-900 border-b border-slate-800 text-slate-300">
-      <div className="max-w-7xl mx-auto px-2 sm:px-6">
+      <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="flex items-center space-x-1 sm:space-x-2 overflow-x-auto no-scrollbar py-2">
           {visibleTabs.map((tab) => {
             const Icon = tab.icon;

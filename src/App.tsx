@@ -705,7 +705,7 @@ export default function App() {
             lang={currentLang}
           />
 
-          <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+          <main className="flex-1 w-full min-h-screen px-4 sm:px-6 lg:px-8 py-6">
             <SubscriptionExpiredGuard 
               currentUser={currentUser} 
               company={tenantCompany} 
