@@ -139,7 +139,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-slate-950 overflow-hidden flex items-center justify-center shadow-md flex-shrink-0 border border-amber-500/30">
               <img 
-                src="/src/assets/images/lms_umar_logo_1785237060471.jpg" 
+                src="/lms_umar_logo_1785237060471.jpg" 
                 alt="LMS by Umar Logo" 
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"

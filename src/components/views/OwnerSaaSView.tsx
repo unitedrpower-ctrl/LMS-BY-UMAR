@@ -68,6 +68,7 @@ export const OwnerSaaSView: React.FC<OwnerSaaSViewProps> = ({ currentUser }) => 
   const [newCompCr, setNewCompCr] = useState('');
   const [newCompAdminName, setNewCompAdminName] = useState('');
   const [newCompAdminEmail, setNewCompAdminEmail] = useState('');
+  const [newCompInitialPassword, setNewCompInitialPassword] = useState('');
   const [newCompPhone, setNewCompPhone] = useState('');
   const [newCompPlan, setNewCompPlan] = useState<SubscriptionPlanType>('1_YEAR');
   const [newCompCapacity, setNewCompCapacity] = useState('100');
@@ -157,7 +158,8 @@ export const OwnerSaaSView: React.FC<OwnerSaaSViewProps> = ({ currentUser }) => 
         planType: newCompPlan,
         maxLaborersAllowed: Number(newCompCapacity),
         pricePaidSar: Number(newCompPrice),
-        contactPhone: newCompPhone.trim()
+        contactPhone: newCompPhone.trim(),
+        initialPassword: newCompInitialPassword.trim()
       }, currentUser);
 
       setOnboardResult({
@@ -754,6 +756,17 @@ export const OwnerSaaSView: React.FC<OwnerSaaSViewProps> = ({ currentUser }) => 
                       placeholder="admin@alrawabi.sa"
                       value={newCompAdminEmail}
                       onChange={(e) => setNewCompAdminEmail(e.target.value)}
+                      className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">Initial Password (Optional)</label>
+                    <input
+                      type="password"
+                      placeholder="Set initial sign-in password"
+                      value={newCompInitialPassword}
+                      onChange={(e) => setNewCompInitialPassword(e.target.value)}
                       className="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
                     />
                   </div>

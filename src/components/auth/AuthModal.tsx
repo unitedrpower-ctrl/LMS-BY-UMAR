@@ -43,7 +43,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Master Owner OTP States
   const [otpEmail, setOtpEmail] = useState('umarchoudhary259@gmail.com');
   const [otpCode, setOtpCode] = useState('');
-  const [activeOtpSent, setActiveOtpSent] = useState<string | null>(null);
+  const [activeOtpSent, setActiveOtpSent] = useState<boolean>(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   
@@ -219,9 +219,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       const res = await requestMasterOtpApi(otpEmail.trim());
       if (res.success) {
-        setActiveOtpSent(res.otpCode);
-        setOtpCode(res.otpCode);
-        setSuccessMessage(`🔐 6-Digit OTP Code sent to ${res.email}! Verification Code: ${res.otpCode}`);
+        setActiveOtpSent(true);
+        setOtpCode(''); // Strict: No pre-fill, empty for manual check/type-in
+        setSuccessMessage(`Verification OTP code has been sent to your email address ${otpEmail.trim()}. Please check your Inbox/Spam.`);
       } else {
         setErrorMessage(res.message || 'Failed to send OTP code.');
       }
@@ -295,7 +295,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <div className="text-center space-y-1">
           <div className="w-14 h-14 bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center mx-auto shadow-lg border border-amber-500/40">
             <img 
-              src="/src/assets/images/lms_umar_logo_1785237060471.jpg" 
+              src="/lms_umar_logo_1785237060471.jpg" 
               alt="LMS by Umar" 
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
@@ -452,17 +452,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       className="w-full bg-slate-950 border-2 border-amber-500 rounded-xl pl-9 pr-3 py-2.5 text-white font-mono text-base tracking-widest placeholder-slate-700 focus:outline-none focus:border-amber-400 font-black text-center"
                     />
                   </div>
-                </div>
-
-                <div className="p-2.5 bg-emerald-950/60 border border-emerald-500/40 rounded-xl text-[11px] text-emerald-300 flex items-center justify-between">
-                  <span>Dispatched OTP Code: <strong className="font-mono text-white text-xs">{activeOtpSent}</strong></span>
-                  <button
-                    type="button"
-                    onClick={() => setOtpCode(activeOtpSent)}
-                    className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] rounded uppercase cursor-pointer"
-                  >
-                    1-Click AutoFill
-                  </button>
                 </div>
 
                 <button

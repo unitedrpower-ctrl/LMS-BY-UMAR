@@ -248,8 +248,9 @@ export async function rejectUserApi(userId: string, currentUser?: User): Promise
   }, currentUser);
 }
 
-export async function registerUserApi(user: User): Promise<User> {
-  return fetchApi<User>('/api/auth/register', {
+export async function registerUserApi(user: User, inviteToken?: string): Promise<any> {
+  const url = inviteToken ? `/api/auth/register?inviteToken=${encodeURIComponent(inviteToken)}` : '/api/auth/register';
+  return fetchApi<any>(url, {
     method: 'POST',
     body: JSON.stringify(user)
   });
@@ -355,6 +356,7 @@ export async function onboardCompanyApi(data: {
   crNumber?: string;
   contactPhone?: string;
   subscriptionStartDate?: string;
+  initialPassword?: string;
 }, currentUser?: User): Promise<{
   success: boolean;
   company: Company;
@@ -428,7 +430,7 @@ export async function completeProfileApi(data: {
 export async function requestMasterOtpApi(email: string): Promise<{
   success: boolean;
   email: string;
-  otpCode: string;
+  otpCode?: string;
   expiresMinutes: number;
   message: string;
 }> {
@@ -448,6 +450,29 @@ export async function verifyMasterOtpApi(email: string, otp: string): Promise<{
     body: JSON.stringify({ email, otp })
   });
 }
+
+export async function requestPasswordResetApi(email: string): Promise<{
+  success: boolean;
+  message: string;
+  emailSent?: boolean;
+  resetUrl?: string;
+}> {
+  return fetchApi('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email })
+  });
+}
+
+export async function resetPasswordApi(token: string, newPassword: string): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  return fetchApi('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, newPassword })
+  });
+}
+
 
 
 

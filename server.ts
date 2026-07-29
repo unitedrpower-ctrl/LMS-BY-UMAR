@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
@@ -37,21 +40,21 @@ export function isMasterOwnerEmail(email?: string): boolean {
 
 // Helper: Resolve Dynamic Domain Base URL (replaces hardcoded localhost:3000)
 export function getAppBaseUrl(req?: Request): string {
-  if (process.env.APP_URL && process.env.APP_URL.trim() !== '') {
-    return process.env.APP_URL.trim().replace(/\/+$/, '');
-  }
   if (process.env.PUBLIC_URL && process.env.PUBLIC_URL.trim() !== '') {
     return process.env.PUBLIC_URL.trim().replace(/\/+$/, '');
+  }
+  if (process.env.APP_URL && process.env.APP_URL.trim() !== '') {
+    return process.env.APP_URL.trim().replace(/\/+$/, '');
   }
 
   if (req) {
     const origin = req.headers.origin as string;
-    if (origin && !origin.includes('localhost') && !origin.includes('127.0.0.1')) {
+    if (origin && !origin.includes('localhost') && !origin.includes('127.0.0.1') && !origin.includes('0.0.0.0')) {
       return origin.replace(/\/+$/, '');
     }
 
     const referer = req.headers.referer as string;
-    if (referer && !referer.includes('localhost') && !referer.includes('127.0.0.1')) {
+    if (referer && !referer.includes('localhost') && !referer.includes('127.0.0.1') && !referer.includes('0.0.0.0')) {
       try {
         const url = new URL(referer);
         return `${url.protocol}//${url.host}`;
@@ -62,12 +65,12 @@ export function getAppBaseUrl(req?: Request): string {
 
     const forwardedProto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
     const forwardedHost = (req.headers['x-forwarded-host'] as string) || req.get('host');
-    if (forwardedHost && !forwardedHost.includes('localhost') && !forwardedHost.includes('127.0.0.1')) {
+    if (forwardedHost && !forwardedHost.includes('localhost') && !forwardedHost.includes('127.0.0.1') && !forwardedHost.includes('0.0.0.0')) {
       return `${forwardedProto}://${forwardedHost}`.replace(/\/+$/, '');
     }
   }
 
-  return 'https://ais-dev-3yv6voj4dphvdauetuzyyz-711029640541.europe-west2.run.app';
+  return 'https://lms-by-umar.onrender.com';
 }
 
 // Automatic Email Invitation Dispatcher Service (Nodemailer / SMTP & Automated Email Service)
@@ -89,12 +92,15 @@ export async function sendClientInvitationEmail(params: {
   subscriptionEndDate: string;
   maxLaborersAllowed: number;
   inviteToken: string;
+  companyId: string;
   role?: string;
   req?: Request;
+  initialPassword?: string;
 }): Promise<EmailDispatchResult> {
   const baseUrl = getAppBaseUrl(params.req);
-  const inviteUrl = `${baseUrl}/?inviteToken=${params.inviteToken}`;
+  const inviteUrl = `${baseUrl}/register?token=${params.inviteToken}&company=${params.companyId}`;
   const role = params.role || 'Super Admin';
+  const initialPassword = params.initialPassword || 'LMS#Welcome2026';
 
   const htmlContent = `
   <!DOCTYPE html>
@@ -167,11 +173,17 @@ export async function sendClientInvitationEmail(params: {
         </p>
 
         <!-- Instructions -->
-        <div style="background-color: #0f172a; border-left: 4px solid #f59e0b; padding: 14px 18px; border-radius: 0 12px 12px 0; margin-top: 24px; font-size: 12px; color: #cbd5e1;">
-          <strong style="color: #fbbf24; display: block; margin-bottom: 4px;">⚡ How to Claim Your Workspace:</strong>
-          1. Click the button above to launch LMS by Umar.<br>
-          2. Click <strong>"Continue with Google"</strong> and sign in using <code style="color: #fbbf24;">${params.adminEmail}</code>.<br>
-          3. You will immediately be granted full <strong>${role}</strong> access to <strong>${params.companyName}</strong>.
+        <div style="background-color: #0f172a; border-left: 4px solid #f59e0b; padding: 14px 18px; border-radius: 0 12px 12px 0; margin-top: 24px; font-size: 13px; color: #cbd5e1; line-height: 1.5;">
+          <strong style="color: #fbbf24; display: block; margin-bottom: 6px;">⚡ How to Claim Your Workspace:</strong>
+          <strong>Option 1 (Direct Login - Recommended):</strong><br>
+          1. Open the portal link: <a href="${baseUrl}" style="color: #60a5fa; text-decoration: underline;">${baseUrl}</a><br>
+          2. Log in using your Registered Email: <code style="color: #38bdf8; font-weight: bold;">${params.adminEmail}</code><br>
+          3. Use your Assigned Initial Password: <code style="color: #fbbf24; font-weight: bold; font-family: monospace; font-size: 14px; background: #1e293b; padding: 2px 6px; border-radius: 4px;">${initialPassword}</code><br><br>
+          
+          <strong>Option 2 (Google SSO Integration):</strong><br>
+          1. Click the button above or open the link, then click <strong>"Continue with Google"</strong>.<br>
+          2. Use your email: <code style="color: #38bdf8;">${params.adminEmail}</code>.<br>
+          3. Your workspace is immediately mapped with full <strong>${role}</strong> rights.
         </div>
 
       </div>
@@ -204,6 +216,9 @@ export async function sendClientInvitationEmail(params: {
           user: smtpUser,
           pass: smtpPass,
         },
+        tls: {
+          rejectUnauthorized: false
+        }
       });
 
       const info = await transporter.sendMail({
@@ -244,6 +259,102 @@ export async function sendClientInvitationEmail(params: {
       inviteUrl,
       message: `✉️ Automated Email invitation dispatched to ${params.adminEmail}! (Live link generated using dynamic domain: ${baseUrl})`
     };
+  }
+}
+
+// Helper: Send Secure Master Owner Verification Email (OTP) via SMTP/Nodemailer
+export async function sendOtpEmail(email: string, otpCode: string): Promise<boolean> {
+  const htmlContent = `
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Secure OTP Verification Code</title>
+  </head>
+  <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0f172a; margin: 0; padding: 24px; color: #e2e8f0;">
+    <div style="max-width: 500px; margin: 0 auto; background-color: #1e293b; border: 1px solid #334155; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);">
+      
+      <!-- Banner Header -->
+      <div style="background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); padding: 24px 20px; text-align: center; border-bottom: 2px solid #fbbf24;">
+        <div style="display: inline-block; background-color: #0f172a; padding: 8px 16px; border-radius: 9999px; border: 1px solid #fbbf24; margin-bottom: 12px;">
+          <span style="color: #fbbf24; font-weight: 900; font-size: 13px; letter-spacing: 1px;">LMS BY UMAR</span>
+        </div>
+        <h1 style="color: #ffffff; font-size: 20px; font-weight: 800; margin: 0; letter-spacing: -0.5px;">Master Owner OTP Authentication</h1>
+      </div>
+
+      <!-- Main Body -->
+      <div style="padding: 28px 24px;">
+        <p style="font-size: 15px; color: #f8fafc; font-weight: 600; margin-top: 0;">Hello Umar,</p>
+        <p style="font-size: 14px; color: #cbd5e1; line-height: 1.6;">
+          You requested a secure verification code to access the Master Owner SaaS platform on LMS by Umar.
+        </p>
+
+        <!-- OTP Code Box -->
+        <div style="background-color: #0f172a; border: 1px solid #fbbf24; border-radius: 12px; padding: 24px; text-align: center; margin: 24px 0;">
+          <p style="color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; margin: 0 0 10px 0; font-weight: 700;">YOUR SECURE 6-DIGIT OTP</p>
+          <div style="color: #ffffff; font-family: 'Courier New', Courier, monospace; font-size: 38px; font-weight: 900; letter-spacing: 8px; margin: 0; text-shadow: 0 2px 4px rgba(0,0,0,0.3); line-height: 1;">
+            ${otpCode}
+          </div>
+          <p style="color: #f43f5e; font-size: 11px; margin: 12px 0 0 0; font-weight: 500;">⚡ This code is confidential and valid for 10 minutes only.</p>
+        </div>
+
+        <p style="font-size: 13px; color: #94a3b8; line-height: 1.6;">
+          If you did not request this OTP, please ignore this email.
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <div style="background-color: #0f172a; padding: 16px; text-align: center; border-top: 1px solid #334155; font-size: 11px; color: #64748b;">
+        <p style="margin: 0;">Automated Identity Service • LMS by Umar Enterprise Systems</p>
+      </div>
+
+    </div>
+  </body>
+  </html>
+  `;
+
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  const smtpFrom = process.env.SMTP_FROM || `LMS by Umar <${smtpUser || 'umarchoudhary259@gmail.com'}>`;
+
+  if (smtpHost && smtpUser && smtpPass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
+
+      const info = await transporter.sendMail({
+        from: smtpFrom,
+        to: email,
+        subject: `[LMS by Umar] Confidential OTP Code: ${otpCode}`,
+        html: htmlContent,
+      });
+
+      console.log(`[MASTER OTP SMTP DISPATCH SUCCESS] Emailed OTP code to ${email}. MessageID: ${info.messageId}`);
+      return true;
+    } catch (err: any) {
+      console.error(`[MASTER OTP SMTP DISPATCH ERROR] ${err.message}`);
+      return false;
+    }
+  } else {
+    console.log(`\n==============================================`);
+    console.log(`[MASTER OWNER OTP DISPATCH SIMULATOR (STRICT SAFETY ON)]`);
+    console.log(`Target: ${email}`);
+    console.log(`OTP Code: ${otpCode}`);
+    console.log(`==============================================\n`);
+    return false;
   }
 }
 
@@ -351,10 +462,12 @@ const rbacContext = (req: AuthenticatedRequest, res: Response, next: NextFunctio
     const foundUser = users.find(u => u.id === userId);
     if (foundUser) {
       if (isMasterOwnerEmail(foundUser.email)) {
-        foundUser.role = 'Owner';
-        foundUser.companyId = 'comp-owner';
-        foundUser.status = 'Active';
-        foundUser.profileCompleted = true;
+        if (!foundUser.companyId || foundUser.companyId === 'comp-owner') {
+          foundUser.role = 'Owner';
+          foundUser.companyId = 'comp-owner';
+          foundUser.status = 'Active';
+          foundUser.profileCompleted = true;
+        }
       }
       req.currentUser = foundUser;
       req.userRole = foundUser.role;
@@ -363,8 +476,10 @@ const rbacContext = (req: AuthenticatedRequest, res: Response, next: NextFunctio
   }
 
   if (req.currentUser && isMasterOwnerEmail(req.currentUser.email)) {
-    req.userRole = 'Owner';
-    req.companyId = 'comp-owner';
+    if (!req.currentUser.companyId || req.currentUser.companyId === 'comp-owner') {
+      req.userRole = 'Owner';
+      req.companyId = 'comp-owner';
+    }
   }
 
   if (!req.userRole && userRoleHeader) {
@@ -596,6 +711,44 @@ async function startServer() {
 
     companies.push(newCompany);
 
+    const initialPassword = req.body.initialPassword || 'LMS#Welcome2026';
+
+    // Provision a Super Admin user directly so they can sign in without needing OAuth/invitation accepted first
+    const existingAdmin = users.find(u => u.email.toLowerCase() === adminEmail.toLowerCase().trim());
+    if (!existingAdmin) {
+      const adminUser: User = {
+        id: `usr-direct-${Date.now()}`,
+        companyId: compId,
+        name: adminName || name.split('@')[0],
+        email: adminEmail.toLowerCase().trim(),
+        role: 'Super Admin',
+        dailyRate: 180.0,
+        joinedDate: new Date().toISOString().split('T')[0],
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+        status: 'Active',
+        isGoogleUser: false,
+        profileCompleted: true,
+        loginPassword: initialPassword,
+        loginSerial: adminEmail.toLowerCase().trim(),
+        adminPermissions: {
+          canViewPayroll: true,
+          canEditPayroll: true,
+          canMarkAttendance: true,
+          canManageSites: true,
+          canManageUsers: true,
+          canAccessSettings: true
+        }
+      };
+      users.push(adminUser);
+    } else {
+      // Upgrade existing user with tenant admin properties
+      existingAdmin.companyId = compId;
+      existingAdmin.role = 'Super Admin';
+      existingAdmin.status = 'Active';
+      existingAdmin.loginPassword = initialPassword;
+      existingAdmin.loginSerial = adminEmail.toLowerCase().trim();
+    }
+
     // Automatically issue an initial Super Admin invitation for this tenant admin email
     const token = `inv-tok-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const newInvitation: RoleInvitation = {
@@ -612,7 +765,7 @@ async function startServer() {
     roleInvitations.push(newInvitation);
 
     const baseUrl = getAppBaseUrl(req);
-    const inviteUrl = `${baseUrl}/?inviteToken=${token}`;
+    const inviteUrl = `${baseUrl}/register?token=${token}&company=${compId}`;
 
     // AUTOMATIC EMAIL DISPATCH TRIGGER
     const emailSent = await sendClientInvitationEmail({
@@ -623,8 +776,10 @@ async function startServer() {
       subscriptionEndDate: newCompany.subscriptionEndDate,
       maxLaborersAllowed: newCompany.maxLaborersAllowed,
       inviteToken: token,
+      companyId: compId,
       role: 'Super Admin',
-      req
+      req,
+      initialPassword
     });
 
     res.status(201).json({
@@ -792,6 +947,7 @@ async function startServer() {
       subscriptionEndDate: demoCompany.subscriptionEndDate,
       maxLaborersAllowed: demoCompany.maxLaborersAllowed,
       inviteToken: token,
+      companyId: compId,
       role: 'Super Admin',
       req
     });
@@ -1003,35 +1159,71 @@ Platform Administration • LMS by Umar`;
   // Public Register Endpoint for Signup Requests
   app.post('/api/auth/register', (req, res) => {
     const userData: User = req.body;
+    const inviteToken = req.query.inviteToken as string || req.body.inviteToken as string;
+
     if (!userData.id) {
       userData.id = `usr-reg-${Date.now()}`;
     }
 
+    // 1. Check if there's an active pending invitation matching token or email
+    const matchingInv = inviteToken ? roleInvitations.find(
+      i => (i.token === inviteToken || i.email.toLowerCase() === userData.email.toLowerCase()) && i.status === 'Pending'
+    ) : null;
+
+    if (matchingInv) {
+      matchingInv.status = 'Accepted';
+      matchingInv.acceptedAt = new Date().toISOString().replace('T', ' ').substring(0, 16);
+
+      const assignedCompanyId = matchingInv.companyId || 'comp-001';
+      userData.companyId = assignedCompanyId;
+      userData.role = matchingInv.role;
+      userData.status = 'Active';
+      userData.profileCompleted = true;
+    } else {
+      if (isMasterOwnerEmail(userData.email)) {
+        userData.role = 'Owner';
+        userData.companyId = 'comp-owner';
+        userData.status = 'Active';
+        userData.profileCompleted = true;
+      } else {
+        userData.status = 'Pending';
+      }
+    }
+
     // Check if user already exists
-    const existing = users.find(u => u.email.toLowerCase() === userData.email.toLowerCase());
-    if (existing) {
-      if (existing.status === 'Active') {
-        return res.status(400).json({ error: 'An active account with this email address already exists.' });
-      } else if (existing.status === 'Pending') {
-        return res.status(200).json(existing);
+    const existingIndex = users.findIndex(u => u.email.toLowerCase() === userData.email.toLowerCase());
+    if (existingIndex >= 0) {
+      const existing = users[existingIndex];
+      if (matchingInv) {
+        // Upgrade existing user with invitation details
+        existing.companyId = userData.companyId;
+        existing.role = userData.role;
+        existing.status = 'Active';
+        existing.profileCompleted = true;
+        if (userData.loginPassword) {
+          existing.loginPassword = userData.loginPassword;
+        }
+        matchingInv.acceptedUserId = existing.id;
+        return res.status(200).json({ success: true, user: existing, message: `🎉 Workspace registration complete! Assigned '${matchingInv.role}' access.` });
+      } else {
+        if (existing.status === 'Active') {
+          return res.status(400).json({ error: 'An active account with this email address already exists.' });
+        } else if (existing.status === 'Pending') {
+          return res.status(200).json(existing);
+        }
       }
     }
 
     // Automatically secure pass on new manual creation if plain-text password is provided
     if (userData.loginPassword && !userData.loginPassword.startsWith('$2b$10$')) {
-      userData.loginPassword = `$2b$10$${Math.random().toString(36).substring(2, 12)}BcryptHashedUmarLMS`;
-    }
-
-    if (isMasterOwnerEmail(userData.email)) {
-      userData.role = 'Owner';
-      userData.companyId = 'comp-owner';
-      userData.status = 'Active';
-      userData.profileCompleted = true;
-    } else {
-      userData.status = 'Pending';
+      // Just keep it simple as plain text since client verifies it literally or has mock passwords
     }
 
     users.push(userData);
+    if (matchingInv) {
+      matchingInv.acceptedUserId = userData.id;
+      return res.status(201).json({ success: true, user: userData, message: `🎉 Workspace registration complete! Assigned '${matchingInv.role}' access.` });
+    }
     res.status(201).json(userData);
   });
 
@@ -1076,7 +1268,7 @@ Platform Administration • LMS by Umar`;
     roleInvitations.push(newInv);
 
     const baseUrl = getAppBaseUrl(req);
-    const inviteUrl = `${baseUrl}/?inviteToken=${token}`;
+    const inviteUrl = `${baseUrl}/register?token=${token}&company=${companyId || targetCompany?.id || 'comp-001'}`;
 
     const emailSent = await sendClientInvitationEmail({
       companyName: targetCompany?.name || 'LMS Enterprise Workspace',
@@ -1086,6 +1278,7 @@ Platform Administration • LMS by Umar`;
       subscriptionEndDate: targetCompany?.subscriptionEndDate || expiresAt.split(' ')[0],
       maxLaborersAllowed: targetCompany?.maxLaborersAllowed || 100,
       inviteToken: token,
+      companyId: companyId || targetCompany?.id || 'comp-001',
       role,
       req
     });
@@ -1142,7 +1335,7 @@ System Administration • LMS by Umar`;
   // ---------------------------------------------------------
   // Master Owner Email OTP Authentication Endpoints
   // ---------------------------------------------------------
-  app.post('/api/auth/request-master-otp', (req, res) => {
+  app.post('/api/auth/request-master-otp', async (req, res) => {
     const { email } = req.body;
     if (!email) {
       return res.status(400).json({ error: 'Email address is required for OTP login.' });
@@ -1162,12 +1355,15 @@ System Administration • LMS by Umar`;
 
     console.log(`[Master Owner OTP] Generated 6-digit OTP for ${normalizedEmail}: ${otpCode}`);
 
+    // STRICT: Dispatch OTP directly and securely via SMTP/Logs
+    await sendOtpEmail(normalizedEmail, otpCode);
+
+    // Secure payload: Do NOT return otpCode
     res.json({
       success: true,
       email: normalizedEmail,
-      otpCode, // Returned for instant testing and automated dispatch display
       expiresMinutes: 10,
-      message: `🔐 6-digit OTP code sent to ${normalizedEmail}. Code: ${otpCode}`
+      message: `Verification OTP code has been sent to your email address ${normalizedEmail}. Please check your Inbox/Spam.`
     });
   });
 
@@ -1237,6 +1433,125 @@ System Administration • LMS by Umar`;
       success: true,
       user: masterUser,
       message: '👑 OTP Authenticated! Welcome Master Platform Owner Umar. Full platform controls unlocked.'
+    });
+  });
+
+  // Forgot Password endpoint
+  app.post('/api/auth/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'Email address is required.' });
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+    const targetUser = users.find(u => u.email.toLowerCase() === normalizedEmail);
+
+    if (!targetUser) {
+      return res.status(404).json({ error: 'No workspace account found with this email address.' });
+    }
+
+    const token = 'rst-' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+    (targetUser as any).passwordResetToken = token;
+    (targetUser as any).passwordResetExpires = Date.now() + 3600000; // 1 hour
+
+    const baseUrl = getAppBaseUrl(req);
+    const resetUrl = `${baseUrl}/?resetToken=${token}`;
+
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Reset Your LMS Workspace Password</title>
+    </head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0f172a; margin: 0; padding: 24px; color: #e2e8f0;">
+      <div style="max-width: 550px; margin: 0 auto; background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 32px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+        <h2 style="color: #ffffff; margin-top: 0; border-bottom: 2px solid #ef4444; padding-bottom: 8px;">🔑 Password Reset Request</h2>
+        <p>Hello ${targetUser.name},</p>
+        <p>We received a request to reset the password for your LMS by Umar workspace account.</p>
+        <p>Click the button below to set a new password. This link is secure and will expire in 1 hour:</p>
+        <div style="text-align: center; margin: 24px 0;">
+          <a href="${resetUrl}" target="_blank" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: #ffffff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+            Reset Password
+          </a>
+        </div>
+        <p style="font-size: 12px; color: #94a3b8; text-align: center;">
+          Or copy and paste this link into your web browser:<br>
+          <a href="${resetUrl}" style="color: #60a5fa; word-break: break-all;">${resetUrl}</a>
+        </p>
+        <hr style="border: 0; border-top: 1px solid #334155; margin: 24px 0;">
+        <p style="font-size: 11px; color: #64748b; text-align: center;">If you did not request this, you can safely ignore this email.</p>
+      </div>
+    </body>
+    </html>
+    `;
+
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    const smtpFrom = process.env.SMTP_FROM || `LMS by Umar <${smtpUser || 'umarchoudhary259@gmail.com'}>`;
+
+    let emailSent = false;
+    let message = 'Automated password reset logged & simulated successfully.';
+
+    if (smtpHost && smtpUser && smtpPass) {
+      try {
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpPort === 465,
+          auth: {
+            user: smtpUser,
+            pass: smtpPass,
+          },
+          tls: {
+            rejectUnauthorized: false
+          }
+        });
+
+        await transporter.sendMail({
+          from: smtpFrom,
+          to: normalizedEmail,
+          subject: '[LMS by Umar] Password Reset Link',
+          html: htmlContent
+        });
+        emailSent = true;
+        message = '✉️ Password reset email has been successfully dispatched to ' + normalizedEmail + ' via SMTP.';
+      } catch (err: any) {
+        console.error('[SMTP Password Reset Error] ' + err.message);
+        message = '✉️ Simulated Dispatch: Link is ready. Notice: ' + err.message;
+      }
+    } else {
+      console.log('[SIMULATED PASSWORD RESET DISPATCH] Email: ' + normalizedEmail + ', URL: ' + resetUrl);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message,
+      emailSent,
+      resetUrl
+    });
+  });
+
+  // Reset Password endpoint
+  app.post('/api/auth/reset-password', (req, res) => {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: 'Token and new password are required.' });
+    }
+
+    const targetUser = users.find(u => (u as any).passwordResetToken === token && (u as any).passwordResetExpires > Date.now());
+    if (!targetUser) {
+      return res.status(400).json({ error: 'Invalid or expired password reset link. Please request a new link.' });
+    }
+
+    targetUser.loginPassword = newPassword;
+    delete (targetUser as any).passwordResetToken;
+    delete (targetUser as any).passwordResetExpires;
+
+    return res.status(200).json({
+      success: true,
+      message: '🎉 Your password has been successfully reset! You can now log in using your email and new password.'
     });
   });
 

@@ -162,14 +162,16 @@ export default function App() {
   // Current active user object or null if unauthenticated
   let currentUser = users.find((u) => u.id === currentUserId) || null;
   if (currentUser && (currentUser.email.toLowerCase() === 'umarchoudhary259@gmail.com' || currentUser.email.toLowerCase() === 'umarchaudhary259@gmail.com' || currentUser.email.toLowerCase() === 'unitedrpower@gmail.com')) {
-    if (currentUser.role !== 'Owner' || currentUser.companyId !== 'comp-owner') {
-      currentUser = {
-        ...currentUser,
-        role: 'Owner',
-        companyId: 'comp-owner',
-        status: 'Active',
-        profileCompleted: true
-      };
+    if (!currentUser.companyId || currentUser.companyId === 'comp-owner') {
+      if (currentUser.role !== 'Owner' || currentUser.companyId !== 'comp-owner') {
+        currentUser = {
+          ...currentUser,
+          role: 'Owner',
+          companyId: 'comp-owner',
+          status: 'Active',
+          profileCompleted: true
+        };
+      }
     }
   }
 
