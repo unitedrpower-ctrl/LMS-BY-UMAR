@@ -92,7 +92,6 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
   const [googleBankName, setGoogleBankName] = useState('');
   const [googleAccountNumber, setGoogleAccountNumber] = useState('');
   const [googleIban, setGoogleIban] = useState('');
-  const [showGoogleMockSelect, setShowGoogleMockSelect] = useState(false);
   const [isGoogleProcessing, setIsGoogleProcessing] = useState(false);
 
   useEffect(() => {
@@ -116,7 +115,7 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
         .then(res => {
           if (res.valid && res.invitation) {
             setInvitationData(res.invitation);
-            setSuccessMessage(`🌟 Official Role Invitation Verified! Invited for email "${res.invitation.email}" as ${res.invitation.role}. Click "Continue with Google" to claim!`);
+            setSuccessMessage(`🌟 Official Role Invitation Verified! Invited for email "${res.invitation.email}" as ${res.invitation.role}. Please complete the form below to claim!`);
           } else {
             setErrorMessage(`Invitation Error: ${res.error || 'Invalid or expired invitation link'}`);
           }
@@ -158,26 +157,20 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
       if (res.userNeededDetails) {
         // Needs Iqama ID & Passport
         setGoogleProfileToComplete({ name: googleName, email: googleEmail });
-        setShowGoogleMockSelect(false);
       } else if (res.user) {
         if (res.user.status === 'Pending') {
           setPendingUserEmail(res.user.email);
-          setShowGoogleMockSelect(false);
           setSuccessMessage(res.message || 'Google account submitted for Admin approval.');
         } else if (res.user.status === 'Active') {
           onLogin(res.user);
-          setShowGoogleMockSelect(false);
         } else {
           setErrorMessage(res.message || `Account status is ${res.user.status}`);
-          setShowGoogleMockSelect(false);
         }
       } else {
         setErrorMessage(res.message || 'Google Authentication failed');
-        setShowGoogleMockSelect(false);
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Google Authentication failed. Please try again.');
-      setShowGoogleMockSelect(false);
     } finally {
       setIsGoogleProcessing(false);
     }
@@ -945,22 +938,6 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                   <CheckCircle2 className="w-4 h-4" /> Activate My Company Workspace
                 </button>
 
-                <div className="relative flex py-1 items-center">
-                  <div className="flex-grow border-t border-slate-800"></div>
-                  <span className="flex-shrink mx-3 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Or Register with Google</span>
-                  <div className="flex-grow border-t border-slate-800"></div>
-                </div>
-
-                <button
-                  type="button"
-                  id="btn-invite-google-register"
-                  onClick={() => setShowGoogleMockSelect(true)}
-                  className="w-full py-2.5 bg-white hover:bg-slate-100 text-slate-950 font-extrabold rounded-xl text-xs shadow-md border border-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-4 h-4" />
-                  <span>Claim Workspace instantly with Google</span>
-                </button>
-
                 <div className="pt-2 border-t border-slate-800 flex justify-center">
                   <button
                     type="button"
@@ -977,6 +954,7 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
               {/* Tab Selector Switcher */}
               {activeTab !== 'forgotPassword' && activeTab !== 'resetPassword' && (
                 <div className={`grid ${isMasterRoute ? 'grid-cols-4' : 'grid-cols-3'} gap-1 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold`}>
+
                   {isMasterRoute && (
                     <button
                       id="tab-btn-master-otp"
@@ -1153,20 +1131,6 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
               </form>
             )}
 
-            <div className="relative flex py-1 items-center">
-              <div className="flex-grow border-t border-slate-800"></div>
-              <span className="flex-shrink mx-3 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Or quick Google Auth</span>
-              <div className="flex-grow border-t border-slate-800"></div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowGoogleMockSelect(true)}
-              className="w-full py-2.5 bg-white hover:bg-slate-100 text-slate-950 font-extrabold rounded-xl text-xs shadow-md border border-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-4 h-4" />
-              <span>Direct Google Sign-In for Master Owner</span>
-            </button>
           </div>
         )}
 
@@ -1225,25 +1189,6 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
               <UserCheck className="w-4 h-4" /> Log In as Admin / Staff
             </button>
 
-            {isMasterRoute && (
-              <>
-                <div className="relative flex py-1 items-center">
-                  <div className="flex-grow border-t border-slate-800"></div>
-                  <span className="flex-shrink mx-3 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Or securely connect</span>
-                  <div className="flex-grow border-t border-slate-800"></div>
-                </div>
-
-                <button
-                  type="button"
-                  id="btn-admin-continue-with-google"
-                  onClick={() => setShowGoogleMockSelect(true)}
-                  className="w-full py-2.5 bg-white hover:bg-slate-100 text-slate-950 font-extrabold rounded-xl text-xs shadow-md border border-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-4 h-4" />
-                  <span>Continue with Google</span>
-                </button>
-              </>
-            )}
           </form>
         )}
 
@@ -1288,25 +1233,6 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
               <HardHat className="w-4 h-4" /> Access Worker Portal
             </button>
 
-            {isMasterRoute && (
-              <>
-                <div className="relative flex py-2 items-center">
-                  <div className="flex-grow border-t border-slate-800"></div>
-                  <span className="flex-shrink mx-4 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Or securely connect</span>
-                  <div className="flex-grow border-t border-slate-800"></div>
-                </div>
-
-                <button
-                  type="button"
-                  id="btn-continue-with-google"
-                  onClick={() => setShowGoogleMockSelect(true)}
-                  className="w-full py-3 bg-white hover:bg-slate-100 text-slate-950 font-extrabold rounded-xl text-xs shadow-md border border-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-4 h-4" />
-                  <span>Continue with Google</span>
-                </button>
-              </>
-            )}
           </form>
         )}
 
@@ -1366,25 +1292,6 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
               <UserPlus className="w-4 h-4" /> Submit Registration (Pending Approval)
             </button>
 
-            {isMasterRoute && (
-              <>
-                <div className="relative flex py-1 items-center">
-                  <div className="flex-grow border-t border-slate-800"></div>
-                  <span className="flex-shrink mx-3 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Or Instant Google Signup</span>
-                  <div className="flex-grow border-t border-slate-800"></div>
-                </div>
-
-                <button
-                  type="button"
-                  id="btn-signup-with-google"
-                  onClick={() => setShowGoogleMockSelect(true)}
-                  className="w-full py-3 bg-white hover:bg-slate-100 text-slate-950 font-extrabold rounded-xl text-xs shadow-md border border-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-4 h-4" />
-                  <span>Sign Up with Google (Captures Name & Email Only)</span>
-                </button>
-              </>
-            )}
           </form>
         )}
 
@@ -1530,167 +1437,7 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
         </div>
       </div>
 
-      {showGoogleMockSelect && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-5 text-left relative">
-            <button 
-              onClick={() => setShowGoogleMockSelect(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
-              <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-6 h-6" />
-              <div>
-                <h3 className="font-extrabold text-white text-base">Sign In with Google</h3>
-                <p className="text-[11px] text-slate-400">Choose an account to continue to LMS by Umar</p>
-              </div>
-            </div>
-
-            <div className="space-y-2.5">
-              {/* Preset 1: Master Owner Umar Chaudhary */}
-              <button
-                type="button"
-                onClick={() => executeGoogleAuth('Umar Chaudhary', 'umarchoudhary259@gmail.com')}
-                className="w-full p-2.5 bg-gradient-to-r from-amber-950/80 to-slate-950 hover:from-amber-900/60 border border-amber-500/60 rounded-2xl flex items-center justify-between text-left transition-all cursor-pointer group shadow-lg shadow-amber-500/10"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="p-1.5 bg-amber-500/20 text-amber-300 rounded-xl border border-amber-500/40">
-                    <Crown className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="font-black text-white text-xs block group-hover:text-amber-300 transition-colors">Umar Chaudhary</span>
-                    <span className="text-[10px] text-amber-200/80 font-mono">umarchoudhary259@gmail.com</span>
-                  </div>
-                </div>
-                <span className="text-[9px] font-black text-amber-300 bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  Master Owner
-                </span>
-              </button>
-
-              {/* Preset 2: System Owner */}
-              <button
-                type="button"
-                onClick={() => executeGoogleAuth('Umar Al-Otaibi', 'unitedrpower@gmail.com')}
-                className="w-full p-2.5 bg-slate-950 hover:bg-slate-800 border border-amber-500/40 rounded-2xl flex items-center justify-between text-left transition-all cursor-pointer group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="p-1.5 bg-amber-500/20 text-amber-400 rounded-xl">
-                    <Crown className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="font-bold text-white text-xs block group-hover:text-amber-400 transition-colors">Umar Al-Otaibi</span>
-                    <span className="text-[10px] text-slate-400 font-mono">unitedrpower@gmail.com</span>
-                  </div>
-                </div>
-                <span className="text-[9px] font-extrabold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full uppercase">Owner</span>
-              </button>
-
-              {/* Preset 2: Invited Super Admin */}
-              <button
-                type="button"
-                onClick={() => executeGoogleAuth('Khalid Al-Mansoor', 'khalid.admin@gmail.com')}
-                className="w-full p-2.5 bg-slate-950 hover:bg-slate-800 border border-indigo-500/40 rounded-2xl flex items-center justify-between text-left transition-all cursor-pointer group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="p-1.5 bg-indigo-500/20 text-indigo-400 rounded-xl">
-                    <ShieldCheck className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="font-bold text-white text-xs block group-hover:text-indigo-400 transition-colors">Khalid Al-Mansoor</span>
-                    <span className="text-[10px] text-slate-400 font-mono">khalid.admin@gmail.com</span>
-                  </div>
-                </div>
-                <span className="text-[9px] font-extrabold text-indigo-400 bg-indigo-500/10 border border-indigo-500/30 px-2 py-0.5 rounded-full uppercase">Invited Super Admin</span>
-              </button>
-
-              {/* Preset 3: Invited Site Supervisor */}
-              <button
-                type="button"
-                onClick={() => executeGoogleAuth('Sarah Jenkins', 'sarah.supervisor@gmail.com')}
-                className="w-full p-2.5 bg-slate-950 hover:bg-slate-800 border border-blue-500/40 rounded-2xl flex items-center justify-between text-left transition-all cursor-pointer group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="p-1.5 bg-blue-500/20 text-blue-400 rounded-xl">
-                    <Briefcase className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="font-bold text-white text-xs block group-hover:text-blue-400 transition-colors">Sarah Jenkins</span>
-                    <span className="text-[10px] text-slate-400 font-mono">sarah.supervisor@gmail.com</span>
-                  </div>
-                </div>
-                <span className="text-[9px] font-extrabold text-blue-400 bg-blue-500/10 border border-blue-500/30 px-2 py-0.5 rounded-full uppercase">Invited Supervisor</span>
-              </button>
-
-              {/* Preset 4: Active Worker */}
-              <button
-                type="button"
-                onClick={() => executeGoogleAuth('Chen Wei', 'chen.wei@laborcorp.com')}
-                className="w-full p-2.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-2xl flex items-center justify-between text-left transition-all cursor-pointer group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full bg-slate-800 overflow-hidden border border-slate-700">
-                    <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150" alt="Chen Wei" className="w-full h-full object-cover" />
-                  </div>
-                  <div>
-                    <span className="font-bold text-white text-xs block group-hover:text-emerald-400 transition-colors">Chen Wei</span>
-                    <span className="text-[10px] text-slate-500 font-mono">chen.wei@laborcorp.com</span>
-                  </div>
-                </div>
-                <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full uppercase">Active Worker</span>
-              </button>
-
-              {/* Option 5: Custom Sign Up or Invited Email */}
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
-                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block">Or login with a custom Google Account</span>
-                
-                <div className="space-y-2">
-                  <div>
-                    <label className="block text-[10px] text-slate-400 mb-1">Full Name</label>
-                    <input
-                      type="text"
-                      id="google-mock-name"
-                      placeholder="e.g. Saeed Al-Ghamdi"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-indigo-500 font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-slate-400 mb-1">Gmail / Google Email Address</label>
-                    <input
-                      type="email"
-                      id="google-mock-email"
-                      placeholder="e.g. saeed.ghamdi@gmail.com"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-indigo-500 font-bold"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  disabled={isGoogleProcessing}
-                  onClick={() => {
-                    const nameEl = document.getElementById('google-mock-name') as HTMLInputElement;
-                    const emailEl = document.getElementById('google-mock-email') as HTMLInputElement;
-                    const mockName = nameEl?.value?.trim() || 'Saeed Al-Ghamdi';
-                    const mockEmail = emailEl?.value?.trim() || 'saeed.ghamdi@gmail.com';
-
-                    executeGoogleAuth(mockName, mockEmail);
-                  }}
-                  className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded-xl text-xs transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
-                >
-                  <span>{isGoogleProcessing ? 'Authenticating...' : 'Authenticate & Continue'}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="text-[10px] text-slate-500 text-center border-t border-slate-800/60 pt-3">
-              Google Auth Mock Service — Simulating production Firebase Google OAuth Popup in preview sandbox.
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
+
