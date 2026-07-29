@@ -59,7 +59,18 @@ export default function App() {
     absencePenaltyMultiplier: 1.0,
     maxDailyComplaints: 3
   });
-  const [currentUserId, setCurrentUserId] = useState<string | null>(initial.currentUserId);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
+    const isRegisterPath = window.location.pathname.startsWith('/register') || window.location.pathname.startsWith('/accept-invite') || window.location.search.includes('token=') || window.location.search.includes('inviteToken=');
+    if (isRegisterPath) {
+      localStorage.removeItem('lms_current_user_id');
+      localStorage.removeItem('lms_user_role');
+      localStorage.removeItem('lms_user_email');
+      localStorage.removeItem('lms_auth_token');
+      localStorage.removeItem('lms_state_' + STORAGE_KEYS.CURRENT_USER_ID);
+      return null;
+    }
+    return initial.currentUserId;
+  });
   const [tenantCompany, setTenantCompany] = useState<any>(undefined);
   const [isMobileFrame, setIsMobileFrame] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>(() => {
@@ -179,7 +190,7 @@ export default function App() {
   useEffect(() => {
     if (!currentUser) return;
     const normEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
-    const isMaster = currentUser.role === 'Owner' || normEmail === 'umarchoudhary259@gmail.com' || normEmail === 'unitedrpower@gmail.com';
+    const isMaster = currentUser.role === 'Owner';
 
     if (currentUser.role === 'Labor') {
       const allowedLaborTabs = ['dashboard', 'attendance', 'payroll', 'complaints', 'notices', 'documents'];
@@ -221,8 +232,7 @@ export default function App() {
     setCurrentUserId(user.id);
 
     // Force navigation route according to role
-    const normEmail = user.email ? user.email.toLowerCase().trim() : '';
-    if (user.role === 'Owner' || normEmail === 'umarchoudhary259@gmail.com' || normEmail === 'unitedrpower@gmail.com') {
+    if (user.role === 'Owner') {
       setActiveTab('saas_owner');
       window.location.hash = '#saas_owner';
     } else if (user.role === 'Labor') {
