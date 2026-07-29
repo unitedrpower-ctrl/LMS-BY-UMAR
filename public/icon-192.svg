@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="192" height="192">
+  <rect width="512" height="512" rx="128" fill="#4f46e5"/>
+  <rect x="32" y="32" width="448" height="448" rx="96" fill="url(#grad)" opacity="0.3"/>
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#312e81"/>
+    </linearGradient>
+  </defs>
+  <!-- Hardhat / Helmet Icon -->
+  <path d="M256 120 C180 120 128 170 128 240 L128 280 C128 290 136 298 146 298 L366 298 C376 298 384 290 384 280 L384 240 C384 170 332 120 256 120 Z" fill="#fbbf24"/>
+  <rect x="96" y="280" width="320" height="32" rx="16" fill="#f59e0b"/>
+  <!-- Front shield / badge -->
+  <path d="M256 140 C270 140 280 152 280 166 L280 210 C280 230 256 245 256 245 C256 245 232 230 232 210 L232 166 C232 152 242 140 256 140 Z" fill="#ffffff"/>
+  <text x="256" y="195" font-family="system-ui, sans-serif" font-weight="900" font-size="36" fill="#4f46e5" text-anchor="middle">U</text>
+  <!-- Base Building Outline -->
+  <path d="M160 340 L160 410 C160 420 168 428 178 428 L334 428 C344 428 352 420 352 410 L352 340 Z" fill="#ffffff" opacity="0.9"/>
+  <!-- Windows -->
+  <rect x="190" y="360" width="30" height="20" rx="4" fill="#4f46e5"/>
+  <rect x="241" y="360" width="30" height="20" rx="4" fill="#4f46e5"/>
+  <rect x="292" y="360" width="30" height="20" rx="4" fill="#4f46e5"/>
+  <rect x="190" y="390" width="30" height="24" rx="4" fill="#4f46e5"/>
+  <rect x="241" y="390" width="30" height="24" rx="4" fill="#4f46e5"/>
+  <rect x="292" y="390" width="30" height="24" rx="4" fill="#4f46e5"/>
+</svg>

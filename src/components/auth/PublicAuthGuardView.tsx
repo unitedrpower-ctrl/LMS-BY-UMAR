@@ -1,0 +1,1213 @@
+import React, { useState, useEffect } from 'react';
+import { User, UserRole, RoleInvitation } from '../../types';
+import { 
+  Lock, 
+  UserCheck, 
+  ShieldCheck, 
+  HardHat, 
+  KeyRound, 
+  Mail, 
+  UserPlus, 
+  CheckCircle2, 
+  AlertTriangle, 
+  Clock,
+  Briefcase,
+  ShieldAlert,
+  ArrowRight,
+  Upload,
+  RefreshCw,
+  X,
+  Crown,
+  Sparkles
+} from 'lucide-react';
+import { validateInvitationApi, googleAuthApi, requestMasterOtpApi, verifyMasterOtpApi } from '../../lib/api';
+
+interface PublicAuthGuardViewProps {
+  users: User[];
+  onLogin: (user: User) => void;
+  onSignUp: (newUser: User) => void;
+  onRefreshUsers?: () => Promise<User[]>;
+}
+
+export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
+  users,
+  onLogin,
+  onSignUp,
+  onRefreshUsers
+}) => {
+  const [activeTab, setActiveTab] = useState<'adminLogin' | 'workerLogin' | 'signUp' | 'masterOtp'>('adminLogin');
+
+  // Form States
+  const [emailOrSerial, setEmailOrSerial] = useState('');
+  const [password, setPassword] = useState('');
+  
+  // Master Owner OTP States
+  const [otpEmail, setOtpEmail] = useState('umarchoudhary259@gmail.com');
+  const [otpCode, setOtpCode] = useState('');
+  const [activeOtpSent, setActiveOtpSent] = useState<string | null>(null);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  
+  // Sign up fields
+  const [name, setName] = useState('');
+  const [signupEmail, setSignupEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [designation, setDesignation] = useState('');
+  const [requestedRole, setRequestedRole] = useState<UserRole>('HR Admin');
+  const [signupPassword, setSignupPassword] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [iban, setIban] = useState('');
+  const [signupAvatar, setSignupAvatar] = useState('');
+
+  // Status Feedback & Pending Approval View
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [pendingUserEmail, setPendingUserEmail] = useState<string | null>(null);
+  const [isCheckingStatus, setIsCheckingStatus] = useState<boolean>(false);
+  const [refreshMessage, setRefreshMessage] = useState<string>('');
+
+  // Role Invitation Token State
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
+  const [invitationData, setInvitationData] = useState<RoleInvitation | null>(null);
+
+  // Google Authentication & Profile Completion Workflow
+  const [googleProfileToComplete, setGoogleProfileToComplete] = useState<{ name: string; email: string } | null>(null);
+  const [googleIqamaId, setGoogleIqamaId] = useState('');
+  const [googlePassportNumber, setGooglePassportNumber] = useState('');
+  const [googlePhone, setGooglePhone] = useState('');
+  const [googleBankName, setGoogleBankName] = useState('');
+  const [googleAccountNumber, setGoogleAccountNumber] = useState('');
+  const [googleIban, setGoogleIban] = useState('');
+  const [showGoogleMockSelect, setShowGoogleMockSelect] = useState(false);
+  const [isGoogleProcessing, setIsGoogleProcessing] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tok = params.get('inviteToken');
+    if (tok) {
+      setInviteToken(tok);
+      validateInvitationApi(tok)
+        .then(res => {
+          if (res.valid && res.invitation) {
+            setInvitationData(res.invitation);
+            setSuccessMessage(`🌟 Official Role Invitation Verified! Invited for email "${res.invitation.email}" as ${res.invitation.role}. Click "Continue with Google" to claim!`);
+          } else {
+            setErrorMessage(`Invitation Error: ${res.error || 'Invalid or expired invitation link'}`);
+          }
+        })
+        .catch(err => {
+          setErrorMessage(`Invitation Error: ${err.message || 'Invalid or expired invitation link'}`);
+        });
+    }
+  }, []);
+
+  // Central Google Auth Execution Handler (Calls Real Backend API)
+  const executeGoogleAuth = async (googleName: string, googleEmail: string, extraData?: {
+    iqamaId?: string;
+    passportNumber?: string;
+    phone?: string;
+    bankName?: string;
+    accountNumber?: string;
+    iban?: string;
+  }) => {
+    setIsGoogleProcessing(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    try {
+      const payload = {
+        name: googleName,
+        email: googleEmail,
+        inviteToken: inviteToken || undefined,
+        iqamaId: extraData?.iqamaId || googleIqamaId,
+        passportNumber: extraData?.passportNumber || googlePassportNumber,
+        phone: extraData?.phone || googlePhone,
+        bankName: extraData?.bankName || googleBankName,
+        accountNumber: extraData?.accountNumber || googleAccountNumber,
+        iban: extraData?.iban || googleIban
+      };
+
+      const res = await googleAuthApi(payload);
+
+      if (res.userNeededDetails) {
+        // Needs Iqama ID & Passport
+        setGoogleProfileToComplete({ name: googleName, email: googleEmail });
+        setShowGoogleMockSelect(false);
+      } else if (res.user) {
+        if (res.user.status === 'Pending') {
+          setPendingUserEmail(res.user.email);
+          setShowGoogleMockSelect(false);
+          setSuccessMessage(res.message || 'Google account submitted for Admin approval.');
+        } else if (res.user.status === 'Active') {
+          onLogin(res.user);
+          setShowGoogleMockSelect(false);
+        } else {
+          setErrorMessage(res.message || `Account status is ${res.user.status}`);
+          setShowGoogleMockSelect(false);
+        }
+      } else {
+        setErrorMessage(res.message || 'Google Authentication failed');
+        setShowGoogleMockSelect(false);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Google Authentication failed. Please try again.');
+      setShowGoogleMockSelect(false);
+    } finally {
+      setIsGoogleProcessing(false);
+    }
+  };
+
+  const handleCompleteGoogleProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    
+    if (!googleProfileToComplete) return;
+
+    if (googleIqamaId.trim().length !== 10) {
+      setErrorMessage('Iqama ID must be exactly 10 digits.');
+      return;
+    }
+    if (googlePassportNumber.trim().length < 6) {
+      setErrorMessage('Please enter a valid Passport Number.');
+      return;
+    }
+
+    await executeGoogleAuth(googleProfileToComplete.name, googleProfileToComplete.email, {
+      iqamaId: googleIqamaId,
+      passportNumber: googlePassportNumber,
+      phone: googlePhone,
+      bankName: googleBankName,
+      accountNumber: googleAccountNumber,
+      iban: googleIban
+    });
+
+    setGoogleProfileToComplete(null);
+  };
+
+  // Master Owner Email OTP Handlers
+  const handleRequestMasterOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+    setIsSendingOtp(true);
+
+    try {
+      const res = await requestMasterOtpApi(otpEmail.trim());
+      if (res.success) {
+        setActiveOtpSent(res.otpCode);
+        setOtpCode(res.otpCode); // Pre-fill for instant seamless verification
+        setSuccessMessage(`🔐 6-Digit OTP Code sent to ${res.email}! Code: ${res.otpCode}`);
+      } else {
+        setErrorMessage(res.message || 'Failed to send OTP code.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to dispatch Master Owner OTP code.');
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const handleVerifyMasterOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+    setIsVerifyingOtp(true);
+
+    try {
+      console.log(`[Master OTP Verification] Verifying code for ${otpEmail.trim()}`);
+      const res = await verifyMasterOtpApi(otpEmail.trim(), otpCode.trim());
+      
+      if (res.success && res.user) {
+        console.log('OTP Success! Redirecting to Master Dashboard...', res.user);
+        
+        // 1. Immediately store Auth Token & Session State in localStorage
+        const authToken = `master-jwt-token-${res.user.id}-${Date.now()}`;
+        localStorage.setItem('lms_auth_token', authToken);
+        localStorage.setItem('lms_current_user_id', res.user.id);
+        localStorage.setItem('lms_user_role', 'Owner');
+        localStorage.setItem('lms_user_email', res.user.email);
+        localStorage.setItem('labor_admin_current_user_id_v1', JSON.stringify(res.user.id));
+        
+        setSuccessMessage('👑 OTP Verification Successful! Redirecting to Master Owner Dashboard...');
+        
+        // 2. Prepare user object with role = 'Owner'
+        const masterUser: User = {
+          ...res.user,
+          role: 'Owner',
+          companyId: 'comp-owner',
+          status: 'Active',
+          profileCompleted: true
+        };
+
+        // 3. Trigger global auth login handler
+        onLogin(masterUser);
+
+        // 4. Update window hash for router direct navigation
+        if (window.location.hash !== '#saas_owner') {
+          window.location.hash = '#saas_owner';
+        }
+      } else {
+        setErrorMessage(res.message || 'Invalid 6-digit OTP code.');
+      }
+    } catch (err: any) {
+      console.error("[Master OTP Error]", err);
+      setErrorMessage(err.message || 'OTP verification failed. Please check the code and try again.');
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
+  // Handle Admin / Staff Login
+  const handleAdminLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const target = users.find(
+      (u) => 
+        (u.email.toLowerCase() === emailOrSerial.toLowerCase().trim() || 
+         u.loginSerial?.toLowerCase() === emailOrSerial.toLowerCase().trim())
+    );
+
+    if (!target) {
+      setErrorMessage('Account not found. Please verify your Email Address or Serial Number.');
+      return;
+    }
+
+    if (target.loginPassword && target.loginPassword !== password) {
+      setErrorMessage('Invalid Password. Please check your credentials.');
+      return;
+    }
+
+    // Check Approval Status
+    if (target.status === 'Pending') {
+      setErrorMessage(
+        '⚠️ Account Pending Approval: Your registration request is currently under review by a Super Admin. You will gain access once approved.'
+      );
+      return;
+    }
+
+    if (target.status === 'Rejected') {
+      setErrorMessage('❌ Your account registration request has been declined by an administrator.');
+      return;
+    }
+
+    if (target.status === 'Inactive') {
+      setErrorMessage('🔴 Account Deactivated: Please contact HR or Super Admin to reactivate your profile.');
+      return;
+    }
+
+    onLogin(target);
+  };
+
+  // Handle Worker Login
+  const handleWorkerLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const target = users.find(
+      (u) => 
+        u.role === 'Labor' && 
+        (u.loginSerial?.toLowerCase() === emailOrSerial.toLowerCase().trim() || 
+         u.email.toLowerCase() === emailOrSerial.toLowerCase().trim())
+    );
+
+    if (!target) {
+      setErrorMessage('Worker Serial Number not found. Check your payslip or contact your Site Supervisor.');
+      return;
+    }
+
+    if (target.loginPassword && target.loginPassword !== password) {
+      setErrorMessage('Incorrect Worker Password. Please verify password with HR.');
+      return;
+    }
+
+    if (target.status === 'Inactive') {
+      setErrorMessage('🔴 Worker Account Inactive: You are not currently marked active on site roll.');
+      return;
+    }
+
+    onLogin(target);
+  };
+
+  // Handle Sign Up Registration
+  const handleSignUpSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    if (!name.trim() || !signupEmail.trim() || !signupPassword.trim()) {
+      setErrorMessage('Please complete all required fields (*).');
+      return;
+    }
+
+    if (users.some((u) => u.email.toLowerCase() === signupEmail.toLowerCase().trim())) {
+      setErrorMessage('An account with this email address already exists.');
+      return;
+    }
+
+    const newUser: User = {
+      id: `usr-reg-${Date.now()}`,
+      name: name.trim(),
+      email: signupEmail.trim(),
+      role: requestedRole,
+      dailyRate: requestedRole === 'Labor' ? 60.0 : 150.0,
+      phone,
+      designation: designation || `${requestedRole} (Pending Registration)`,
+      joinedDate: new Date().toISOString().split('T')[0],
+      avatar: signupAvatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+      bankName: bankName || undefined,
+      accountNumber: accountNumber || undefined,
+      iban: iban || undefined,
+      loginSerial: `REG-${Math.floor(1000 + Math.random() * 9000)}`,
+      loginPassword: signupPassword,
+      status: 'Pending'
+    };
+
+    onSignUp(newUser);
+    setPendingUserEmail(newUser.email);
+    setSuccessMessage(
+      `✅ Account registration submitted successfully for ${name}! Your request is now PENDING Super Admin approval.`
+    );
+
+    // Reset Form
+    setName('');
+    setSignupEmail('');
+    setPhone('');
+    setDesignation('');
+    setSignupPassword('');
+    setBankName('');
+    setAccountNumber('');
+    setIban('');
+    setSignupAvatar('');
+  };
+
+  // Refresh Status Handler for Waiting Screen
+  const handleRefreshStatus = async () => {
+    if (!pendingUserEmail) return;
+    setIsCheckingStatus(true);
+    setRefreshMessage('');
+
+    let currentUsersList = users;
+    if (onRefreshUsers) {
+      try {
+        currentUsersList = await onRefreshUsers();
+      } catch (e: any) {
+        console.warn("Failed to refresh users via API:", e.message);
+      }
+    }
+
+    setIsCheckingStatus(false);
+    const u = currentUsersList.find((x) => x.email.toLowerCase() === pendingUserEmail.toLowerCase());
+    if (u) {
+      if (u.status === 'Active') {
+        setRefreshMessage('🎉 Your account has been approved! Logging you in...');
+        setTimeout(() => {
+          onLogin(u);
+        }, 800);
+      } else if (u.status === 'Rejected') {
+        setRefreshMessage('❌ Your account request was declined by the administrator.');
+      } else {
+        setRefreshMessage('Status refreshed. Still pending approval.');
+      }
+    } else {
+      setRefreshMessage('Status refreshed. Still pending approval.');
+    }
+  };
+
+  // Quick Demo Shortcut
+  const handleQuickDemo = (userId: string) => {
+    const demoUser = users.find((u) => u.id === userId);
+    if (demoUser) {
+      onLogin(demoUser);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden font-sans">
+      {/* Background Subtle Gradient Lights */}
+      <div className="absolute -top-40 -left-40 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
+
+      {/* Main Container Card */}
+      <div className="w-full max-w-xl bg-slate-900/90 border border-slate-800 rounded-3xl shadow-2xl backdrop-blur-xl p-6 sm:p-8 space-y-6 relative z-10">
+        
+        {/* Brand Logo & Header */}
+        <div className="text-center space-y-2">
+          <div className="w-16 h-16 bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center mx-auto shadow-xl border-2 border-amber-500/40">
+            <img 
+              src="/src/assets/images/lms_umar_logo_1785237060471.jpg" 
+              alt="LMS by Umar Logo" 
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-white tracking-tight flex items-center justify-center gap-2">
+              <span>LMS</span>
+              <span className="text-amber-400 text-xs font-semibold px-2.5 py-0.5 bg-amber-500/10 border border-amber-500/30 rounded-full">
+                by Umar
+              </span>
+            </h1>
+            <p className="text-xs text-slate-400 font-medium mt-1">
+              Labor, Attendance & Payroll Management System
+            </p>
+          </div>
+
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-950/80 border border-indigo-800/60 rounded-full text-[11px] text-indigo-300 font-semibold shadow-inner">
+            <ShieldAlert className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Global Authentication Guard Active</span>
+          </div>
+        </div>
+
+        {/* Pending Approval Waiting Screen or Normal Tabs & Forms */}
+        {pendingUserEmail ? (
+          <div className="space-y-6 py-4 text-center animate-in fade-in zoom-in duration-300">
+            <div className="w-20 h-20 bg-amber-500/20 border-2 border-amber-500/50 rounded-3xl flex items-center justify-center mx-auto text-amber-400 shadow-xl">
+              <Clock className="w-10 h-10 animate-spin-slow" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="px-3 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-full text-xs font-extrabold uppercase tracking-wider">
+                Waiting For Admin Approval
+              </span>
+              <h2 className="text-xl font-black text-white">Registration Submitted Successfully!</h2>
+              <p className="text-xs text-slate-300 max-w-md mx-auto">
+                Your account (<span className="text-amber-300 font-bold">{pendingUserEmail}</span>) has been registered and is currently pending review by a Super Administrator.
+              </p>
+            </div>
+
+            {refreshMessage && (
+              <div className="p-3 bg-indigo-950/80 border border-indigo-700/60 rounded-xl text-xs font-bold text-indigo-200">
+                {refreshMessage}
+              </div>
+            )}
+
+            <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-2xl space-y-3 text-left text-xs">
+              <div className="flex items-center justify-between text-slate-400">
+                <span>Registered Email:</span>
+                <span className="text-white font-mono font-bold">{pendingUserEmail}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-400">
+                <span>Approval Status:</span>
+                <span className="text-amber-400 font-extrabold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20 animate-pulse">PENDING REVIEW</span>
+              </div>
+            </div>
+
+            <div className="space-y-2.5 pt-2">
+              <button
+                type="button"
+                onClick={handleRefreshStatus}
+                disabled={isCheckingStatus}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${isCheckingStatus ? 'animate-spin' : ''}`} />
+                <span>{isCheckingStatus ? 'Checking Database Status...' : 'Refresh Status & Check Approval'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingUserEmail(null);
+                  setActiveTab('adminLogin');
+                }}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition-all cursor-pointer"
+              >
+                Return to Login Portal
+              </button>
+            </div>
+          </div>
+        ) : googleProfileToComplete ? (
+          <div className="space-y-5 py-2 text-left animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="text-center space-y-1">
+              <span className="px-3 py-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 rounded-full text-[10px] font-extrabold uppercase tracking-widest inline-flex items-center gap-1">
+                <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-3 h-3" />
+                Google Connected
+              </span>
+              <h2 className="text-lg font-black text-white">Complete Your Labor Profile</h2>
+              <p className="text-xs text-slate-400">
+                Please provide your official residency and travel document details to complete your registration in LMS by Umar.
+              </p>
+            </div>
+
+            <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-2xl space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Google Name:</span>
+                <span className="text-white font-bold">{googleProfileToComplete.name}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Google Email:</span>
+                <span className="text-white font-mono font-bold">{googleProfileToComplete.email}</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleCompleteGoogleProfile} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">Iqama ID *</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={10}
+                    placeholder="e.g. 2100984712"
+                    value={googleIqamaId}
+                    onChange={(e) => setGoogleIqamaId(e.target.value.replace(/\D/g, ''))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
+                  />
+                  <span className="text-[9px] text-slate-500 mt-0.5 block">10-digit Saudi Civil / Residency ID</span>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">Passport Number *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. N1029384"
+                    value={googlePassportNumber}
+                    onChange={(e) => setGooglePassportNumber(e.target.value.toUpperCase())}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium font-mono"
+                  />
+                  <span className="text-[9px] text-slate-500 mt-0.5 block">Official passport serial number</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 mb-1">Phone Number</label>
+                <input
+                  type="text"
+                  placeholder="e.g. +966 50 123 4567"
+                  value={googlePhone}
+                  onChange={(e) => setGooglePhone(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Bank Account Details */}
+              <div className="p-4 bg-slate-950/50 border border-slate-800/80 rounded-2xl space-y-2.5">
+                <span className="text-xs font-bold text-indigo-400 block flex items-center gap-1.5">
+                  🏦 Bank Account Details (Optional)
+                </span>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">Bank Name</label>
+                    <input
+                      type="text"
+                      placeholder="Al Rajhi"
+                      value={googleBankName}
+                      onChange={(e) => setGoogleBankName(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">Account No.</label>
+                    <input
+                      type="text"
+                      placeholder="102938475"
+                      value={googleAccountNumber}
+                      onChange={(e) => setGoogleAccountNumber(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-white font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">Saudi IBAN</label>
+                    <input
+                      type="text"
+                      placeholder="SA..."
+                      value={googleIban}
+                      onChange={(e) => setGoogleIban(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-white font-mono text-xs uppercase"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {errorMessage && (
+                <div className="p-3 bg-rose-950/90 border border-rose-800 text-rose-200 rounded-2xl text-xs flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+                  <div className="leading-relaxed">{errorMessage}</div>
+                </div>
+              )}
+
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setGoogleProfileToComplete(null)}
+                  className="w-1/3 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition-all cursor-pointer"
+                >
+                  Cancel Connect
+                </button>
+                <button
+                  type="submit"
+                  className="w-2/3 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-1.5"
+                >
+                  <UserPlus className="w-4 h-4" /> Submit Profile & Request Approval
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : (
+          <>
+            {/* Tab Selector Switcher */}
+            <div className="grid grid-cols-4 gap-1 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold">
+              <button
+                id="tab-btn-master-otp"
+                onClick={() => {
+                  setActiveTab('masterOtp');
+                  setErrorMessage('');
+                  setSuccessMessage('');
+                }}
+                className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                  activeTab === 'masterOtp'
+                    ? 'bg-gradient-to-r from-amber-600 to-yellow-600 text-white shadow-md font-black'
+                    : 'text-amber-400 hover:text-amber-200 hover:bg-slate-900'
+                }`}
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-200" /> Owner OTP
+              </button>
+
+              <button
+                id="tab-btn-admin-login"
+                onClick={() => {
+                  setActiveTab('adminLogin');
+                  setErrorMessage('');
+                  setSuccessMessage('');
+                }}
+                className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                  activeTab === 'adminLogin'
+                    ? 'bg-indigo-600 text-white shadow-md font-extrabold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-indigo-200" /> Admin
+              </button>
+
+              <button
+                id="tab-btn-worker-login"
+                onClick={() => {
+                  setActiveTab('workerLogin');
+                  setErrorMessage('');
+                  setSuccessMessage('');
+                }}
+                className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                  activeTab === 'workerLogin'
+                    ? 'bg-amber-600 text-white shadow-md font-extrabold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                <HardHat className="w-3.5 h-3.5 text-amber-200" /> Worker
+              </button>
+
+              <button
+                id="tab-btn-signup"
+                onClick={() => {
+                  setActiveTab('signUp');
+                  setErrorMessage('');
+                  setSuccessMessage('');
+                }}
+                className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                  activeTab === 'signUp'
+                    ? 'bg-emerald-600 text-white shadow-md font-extrabold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                <UserPlus className="w-3.5 h-3.5 text-emerald-200" /> Sign Up
+              </button>
+            </div>
+
+            {/* Status Alerts */}
+            {errorMessage && (
+              <div className="p-3 bg-rose-950/90 border border-rose-800 text-rose-200 rounded-2xl text-xs flex items-start gap-2.5 animate-shake">
+                <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+                <div className="leading-relaxed">{errorMessage}</div>
+              </div>
+            )}
+
+            {successMessage && (
+              <div className="p-3 bg-emerald-950/90 border border-emerald-800 text-emerald-200 rounded-2xl text-xs flex items-start gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                <div className="leading-relaxed">{successMessage}</div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Tab 0: Master Owner Email OTP Login */}
+        {activeTab === 'masterOtp' && (
+          <div className="space-y-4 text-xs">
+            <div className="p-3 bg-gradient-to-r from-amber-950/80 to-slate-950 border border-amber-500/50 rounded-2xl text-amber-200 flex items-start gap-2.5">
+              <Crown className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <strong className="block text-white text-xs font-extrabold">Master Owner Emergency OTP Access</strong>
+                <p className="text-[11px] text-amber-300/90 leading-relaxed mt-0.5">
+                  Bypasses approval queues or password conflicts. Dispatches a 6-digit OTP to <code className="bg-black/50 px-1 py-0.5 rounded font-mono text-amber-200">umarchoudhary259@gmail.com</code>.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleRequestMasterOtp} className="space-y-3">
+              <div>
+                <label className="block font-bold text-slate-300 mb-1">Master Owner Email Address</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 absolute left-3 top-3 text-amber-500" />
+                  <input
+                    type="email"
+                    required
+                    value={otpEmail}
+                    onChange={(e) => setOtpEmail(e.target.value)}
+                    placeholder="umarchoudhary259@gmail.com"
+                    className="w-full bg-slate-950 border border-amber-500/40 rounded-xl pl-9 pr-3 py-2.5 text-white font-mono placeholder-slate-600 focus:outline-none focus:border-amber-400 font-bold"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                id="btn-request-master-otp"
+                disabled={isSendingOtp}
+                className="w-full py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-black rounded-xl text-xs shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isSendingOtp ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" /> Sending 6-Digit OTP...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="w-4 h-4" /> Send OTP Code
+                  </>
+                )}
+              </button>
+            </form>
+
+            {/* OTP Code Entry Form */}
+            {activeOtpSent && (
+              <form onSubmit={handleVerifyMasterOtp} className="space-y-3 pt-3 border-t border-slate-800 animate-in fade-in duration-300">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-extrabold text-amber-300">Enter Received 6-Digit OTP Code</label>
+                    <span className="text-[10px] text-amber-400/80 font-mono">Valid for 10 min</span>
+                  </div>
+                  <div className="relative">
+                    <KeyRound className="w-4 h-4 absolute left-3 top-3 text-amber-400" />
+                    <input
+                      type="text"
+                      required
+                      maxLength={6}
+                      placeholder="e.g. 859102"
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value)}
+                      className="w-full bg-slate-950 border-2 border-amber-500 rounded-xl pl-9 pr-3 py-2.5 text-white font-mono text-base tracking-widest placeholder-slate-700 focus:outline-none focus:border-amber-400 font-black text-center"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-2.5 bg-emerald-950/60 border border-emerald-500/40 rounded-xl text-[11px] text-emerald-300 flex items-center justify-between">
+                  <span>Dispatched OTP Code: <strong className="font-mono text-white text-xs">{activeOtpSent}</strong></span>
+                  <button
+                    type="button"
+                    onClick={() => setOtpCode(activeOtpSent)}
+                    className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] rounded uppercase cursor-pointer"
+                  >
+                    1-Click AutoFill
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  id="btn-verify-master-otp"
+                  disabled={isVerifyingOtp}
+                  className="w-full py-3 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isVerifyingOtp ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-slate-950" /> Verifying Code...
+                    </>
+                  ) : (
+                    <>
+                      <Crown className="w-4 h-4 text-slate-950" /> Verify OTP & Access Master Dashboard
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-slate-800"></div>
+              <span className="flex-shrink mx-3 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Or quick Google Auth</span>
+              <div className="flex-grow border-t border-slate-800"></div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowGoogleMockSelect(true)}
+              className="w-full py-2.5 bg-white hover:bg-slate-100 text-slate-950 font-extrabold rounded-xl text-xs shadow-md border border-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-4 h-4" />
+              <span>Direct Google Sign-In for Master Owner</span>
+            </button>
+          </div>
+        )}
+
+        {/* Tab 1: Admin & Staff Login */}
+        {activeTab === 'adminLogin' && (
+          <form onSubmit={handleAdminLoginSubmit} className="space-y-4 text-xs">
+            <div>
+              <label className="block font-bold text-slate-300 mb-1">Email Address or Admin Login Serial</label>
+              <div className="relative">
+                <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                <input
+                  type="text"
+                  required
+                  placeholder="admin@laborcorp.com or ADMIN-001"
+                  value={emailOrSerial}
+                  onChange={(e) => setEmailOrSerial(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-300 mb-1">Password</label>
+              <div className="relative">
+                <KeyRound className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              id="btn-submit-admin-login"
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2"
+            >
+              <UserCheck className="w-4 h-4" /> Log In as Admin / Staff
+            </button>
+
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-slate-800"></div>
+              <span className="flex-shrink mx-3 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Or securely connect</span>
+              <div className="flex-grow border-t border-slate-800"></div>
+            </div>
+
+            <button
+              type="button"
+              id="btn-admin-continue-with-google"
+              onClick={() => setShowGoogleMockSelect(true)}
+              className="w-full py-2.5 bg-white hover:bg-slate-100 text-slate-950 font-extrabold rounded-xl text-xs shadow-md border border-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-4 h-4" />
+              <span>Continue with Google</span>
+            </button>
+          </form>
+        )}
+
+        {/* Tab 2: Worker Login */}
+        {activeTab === 'workerLogin' && (
+          <form onSubmit={handleWorkerLoginSubmit} className="space-y-4 text-xs">
+            <div>
+              <label className="block font-bold text-slate-300 mb-1">Worker Login Serial Number</label>
+              <div className="relative">
+                <HardHat className="w-4 h-4 absolute left-3 top-3 text-amber-500" />
+                <input
+                  type="text"
+                  required
+                  placeholder="EMP-1001"
+                  value={emailOrSerial}
+                  onChange={(e) => setEmailOrSerial(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white uppercase font-mono placeholder-slate-600 focus:outline-none focus:border-amber-500 font-bold"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-300 mb-1">Worker Access Password</label>
+              <div className="relative">
+                <KeyRound className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                <input
+                  type="password"
+                  required
+                  placeholder="WorkerPass#1"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 font-medium"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              id="btn-submit-worker-login"
+              className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2"
+            >
+              <HardHat className="w-4 h-4" /> Access Worker Portal
+            </button>
+
+            <div className="relative flex py-2 items-center">
+              <div className="flex-grow border-t border-slate-800"></div>
+              <span className="flex-shrink mx-4 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Or securely connect</span>
+              <div className="flex-grow border-t border-slate-800"></div>
+            </div>
+
+            <button
+              type="button"
+              id="btn-continue-with-google"
+              onClick={() => setShowGoogleMockSelect(true)}
+              className="w-full py-3 bg-white hover:bg-slate-100 text-slate-950 font-extrabold rounded-xl text-xs shadow-md border border-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-4 h-4" />
+              <span>Continue with Google</span>
+            </button>
+          </form>
+        )}
+
+        {/* Tab 3: Sign Up / Register */}
+        {activeTab === 'signUp' && (
+          <form onSubmit={handleSignUpSubmit} className="space-y-4 text-xs">
+            <div className="p-3.5 bg-slate-950/80 border border-emerald-500/30 rounded-2xl space-y-2">
+              <span className="text-xs font-black text-emerald-400 uppercase tracking-wider block">
+                Simplified Quick Registration
+              </span>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Enter your basic details or click <strong className="text-white">Sign Up with Google</strong>. Once approved by a Super Admin, you will complete remaining profile details upon first login.
+              </p>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-300 mb-1">Full Name *</label>
+              <input
+                type="text"
+                required
+                placeholder="Mohammed Al-Otaibi"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-300 mb-1">Email Address *</label>
+              <input
+                type="email"
+                required
+                placeholder="m.otaibi@company.sa"
+                value={signupEmail}
+                onChange={(e) => setSignupEmail(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-300 mb-1">Create Password *</label>
+              <input
+                type="password"
+                required
+                placeholder="••••••••"
+                value={signupPassword}
+                onChange={(e) => setSignupPassword(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-medium"
+              />
+            </div>
+
+            <button
+              type="submit"
+              id="btn-submit-signup"
+              className="w-full py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" /> Submit Registration (Pending Approval)
+            </button>
+
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-slate-800"></div>
+              <span className="flex-shrink mx-3 text-slate-500 font-bold uppercase tracking-wider text-[10px]">Or Instant Google Signup</span>
+              <div className="flex-grow border-t border-slate-800"></div>
+            </div>
+
+            <button
+              type="button"
+              id="btn-signup-with-google"
+              onClick={() => setShowGoogleMockSelect(true)}
+              className="w-full py-3 bg-white hover:bg-slate-100 text-slate-950 font-extrabold rounded-xl text-xs shadow-md border border-slate-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-4 h-4" />
+              <span>Sign Up with Google (Captures Name & Email Only)</span>
+            </button>
+          </form>
+        )}
+
+        {/* Footer info */}
+        <div className="text-center text-[11px] text-slate-500 pt-2 border-t border-slate-800">
+          LMS by Umar • Verified Official Portal Access
+        </div>
+      </div>
+
+      {showGoogleMockSelect && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-5 text-left relative">
+            <button 
+              onClick={() => setShowGoogleMockSelect(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
+              <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-6 h-6" />
+              <div>
+                <h3 className="font-extrabold text-white text-base">Sign In with Google</h3>
+                <p className="text-[11px] text-slate-400">Choose an account to continue to LMS by Umar</p>
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              {/* Preset 1: Master Owner Umar Chaudhary */}
+              <button
+                type="button"
+                onClick={() => executeGoogleAuth('Umar Chaudhary', 'umarchoudhary259@gmail.com')}
+                className="w-full p-2.5 bg-gradient-to-r from-amber-950/80 to-slate-950 hover:from-amber-900/60 border border-amber-500/60 rounded-2xl flex items-center justify-between text-left transition-all cursor-pointer group shadow-lg shadow-amber-500/10"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 bg-amber-500/20 text-amber-300 rounded-xl border border-amber-500/40">
+                    <Crown className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-black text-white text-xs block group-hover:text-amber-300 transition-colors">Umar Chaudhary</span>
+                    <span className="text-[10px] text-amber-200/80 font-mono">umarchoudhary259@gmail.com</span>
+                  </div>
+                </div>
+                <span className="text-[9px] font-black text-amber-300 bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  Master Owner
+                </span>
+              </button>
+
+              {/* Preset 2: System Owner */}
+              <button
+                type="button"
+                onClick={() => executeGoogleAuth('Umar Al-Otaibi', 'unitedrpower@gmail.com')}
+                className="w-full p-2.5 bg-slate-950 hover:bg-slate-800 border border-amber-500/40 rounded-2xl flex items-center justify-between text-left transition-all cursor-pointer group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 bg-amber-500/20 text-amber-400 rounded-xl">
+                    <Crown className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-white text-xs block group-hover:text-amber-400 transition-colors">Umar Al-Otaibi</span>
+                    <span className="text-[10px] text-slate-400 font-mono">unitedrpower@gmail.com</span>
+                  </div>
+                </div>
+                <span className="text-[9px] font-extrabold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full uppercase">Owner</span>
+              </button>
+
+              {/* Preset 2: Invited Super Admin */}
+              <button
+                type="button"
+                onClick={() => executeGoogleAuth('Khalid Al-Mansoor', 'khalid.admin@gmail.com')}
+                className="w-full p-2.5 bg-slate-950 hover:bg-slate-800 border border-indigo-500/40 rounded-2xl flex items-center justify-between text-left transition-all cursor-pointer group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 bg-indigo-500/20 text-indigo-400 rounded-xl">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-white text-xs block group-hover:text-indigo-400 transition-colors">Khalid Al-Mansoor</span>
+                    <span className="text-[10px] text-slate-400 font-mono">khalid.admin@gmail.com</span>
+                  </div>
+                </div>
+                <span className="text-[9px] font-extrabold text-indigo-400 bg-indigo-500/10 border border-indigo-500/30 px-2 py-0.5 rounded-full uppercase">Invited Super Admin</span>
+              </button>
+
+              {/* Preset 3: Invited Site Supervisor */}
+              <button
+                type="button"
+                onClick={() => executeGoogleAuth('Sarah Jenkins', 'sarah.supervisor@gmail.com')}
+                className="w-full p-2.5 bg-slate-950 hover:bg-slate-800 border border-blue-500/40 rounded-2xl flex items-center justify-between text-left transition-all cursor-pointer group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 bg-blue-500/20 text-blue-400 rounded-xl">
+                    <Briefcase className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-white text-xs block group-hover:text-blue-400 transition-colors">Sarah Jenkins</span>
+                    <span className="text-[10px] text-slate-400 font-mono">sarah.supervisor@gmail.com</span>
+                  </div>
+                </div>
+                <span className="text-[9px] font-extrabold text-blue-400 bg-blue-500/10 border border-blue-500/30 px-2 py-0.5 rounded-full uppercase">Invited Supervisor</span>
+              </button>
+
+              {/* Preset 4: Active Worker */}
+              <button
+                type="button"
+                onClick={() => executeGoogleAuth('Chen Wei', 'chen.wei@laborcorp.com')}
+                className="w-full p-2.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-2xl flex items-center justify-between text-left transition-all cursor-pointer group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-full bg-slate-800 overflow-hidden border border-slate-700">
+                    <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150" alt="Chen Wei" className="w-full h-full object-cover" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-white text-xs block group-hover:text-emerald-400 transition-colors">Chen Wei</span>
+                    <span className="text-[10px] text-slate-500 font-mono">chen.wei@laborcorp.com</span>
+                  </div>
+                </div>
+                <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full uppercase">Active Worker</span>
+              </button>
+
+              {/* Option 5: Custom Sign Up or Invited Email */}
+              <div className="p-3 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
+                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block">Or login with a custom Google Account</span>
+                
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-1">Full Name</label>
+                    <input
+                      type="text"
+                      id="google-mock-name"
+                      placeholder="e.g. Saeed Al-Ghamdi"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-indigo-500 font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-1">Gmail / Google Email Address</label>
+                    <input
+                      type="email"
+                      id="google-mock-email"
+                      placeholder="e.g. saeed.ghamdi@gmail.com"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-indigo-500 font-bold"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={isGoogleProcessing}
+                  onClick={() => {
+                    const nameEl = document.getElementById('google-mock-name') as HTMLInputElement;
+                    const emailEl = document.getElementById('google-mock-email') as HTMLInputElement;
+                    const mockName = nameEl?.value?.trim() || 'Saeed Al-Ghamdi';
+                    const mockEmail = emailEl?.value?.trim() || 'saeed.ghamdi@gmail.com';
+
+                    executeGoogleAuth(mockName, mockEmail);
+                  }}
+                  className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded-xl text-xs transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                >
+                  <span>{isGoogleProcessing ? 'Authenticating...' : 'Authenticate & Continue'}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="text-[10px] text-slate-500 text-center border-t border-slate-800/60 pt-3">
+              Google Auth Mock Service — Simulating production Firebase Google OAuth Popup in preview sandbox.
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

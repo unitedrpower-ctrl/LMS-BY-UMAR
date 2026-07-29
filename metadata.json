@@ -1,0 +1,6 @@
+{
+  "name": "LMS by Umar",
+  "description": "LMS by Umar - Labor, Attendance & Payroll Management System",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
