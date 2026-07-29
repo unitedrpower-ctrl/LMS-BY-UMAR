@@ -279,8 +279,9 @@ export async function revokeInvitationApi(id: string, currentUser?: User): Promi
   }, currentUser);
 }
 
-export async function validateInvitationApi(token: string): Promise<{ valid: boolean; invitation?: RoleInvitation; error?: string }> {
-  return fetchApi<{ valid: boolean; invitation?: RoleInvitation; error?: string }>(`/api/invitations/validate/${encodeURIComponent(token)}`);
+export async function validateInvitationApi(token: string, company?: string): Promise<{ valid: boolean; invitation?: RoleInvitation; error?: string; company?: Company }> {
+  const companyQuery = company ? `&company=${encodeURIComponent(company)}` : '';
+  return fetchApi<{ valid: boolean; invitation?: RoleInvitation; error?: string; company?: Company }>(`/api/verify-invite?token=${encodeURIComponent(token)}${companyQuery}`);
 }
 
 export async function googleAuthApi(data: {

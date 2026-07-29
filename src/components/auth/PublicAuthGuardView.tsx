@@ -94,6 +94,7 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
     const params = new URLSearchParams(window.location.search);
     const tok = params.get('inviteToken') || params.get('token');
     const resetTok = params.get('resetToken');
+    const compParam = params.get('company') || params.get('companyId');
     const isRegisterPath = window.location.pathname.startsWith('/register') || window.location.pathname.startsWith('/accept-invite');
     
     if (resetTok) {
@@ -106,7 +107,7 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
 
     if (tok) {
       setInviteToken(tok);
-      validateInvitationApi(tok)
+      validateInvitationApi(tok, compParam || undefined)
         .then(res => {
           if (res.valid && res.invitation) {
             setInvitationData(res.invitation);
@@ -496,6 +497,8 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
       role: regRole,
       dailyRate: regRole === 'Labor' ? 60.0 : 150.0,
       phone,
+      iqamaId: googleIqamaId || undefined,
+      passportNumber: googlePassportNumber || undefined,
       designation: designation || `${regRole} (Active Tenant Workspace)`,
       joinedDate: new Date().toISOString().split('T')[0],
       avatar: signupAvatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
@@ -843,12 +846,12 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                     <div className="text-rose-400 font-bold text-right">{invitationData.expiresAt}</div>
                   </div>
                 </div>
-              ) : (
+              ) : !errorMessage ? (
                 <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl text-center space-y-2.5 text-xs">
                   <Clock className="w-6 h-6 text-indigo-400 animate-spin mx-auto animate-duration-1000" />
                   <div className="text-slate-400">Verifying security token and client credentials...</div>
                 </div>
-              )}
+              ) : null}
 
               <form onSubmit={handleInviteRegisterSubmit} className="space-y-4 text-xs">
                 <div>
@@ -856,10 +859,11 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                   <input
                     type="text"
                     required
+                    disabled={!invitationData}
                     placeholder="Mohammed Al-Otaibi"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -870,8 +874,8 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                     readOnly
                     disabled
                     value={invitationData ? invitationData.email : ''}
-                    placeholder="Verifying email..."
-                    className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-2.5 text-slate-400 font-mono focus:outline-none font-bold"
+                    placeholder={errorMessage ? "Verification failed" : "Verifying email..."}
+                    className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-2.5 text-slate-400 font-mono focus:outline-none font-bold disabled:opacity-50"
                   />
                 </div>
 
@@ -880,10 +884,11 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                   <input
                     type="password"
                     required
+                    disabled={!invitationData}
                     placeholder="••••••••"
                     value={signupPassword}
                     onChange={(e) => setSignupPassword(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -893,10 +898,11 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                     <input
                       type="text"
                       maxLength={10}
+                      disabled={!invitationData}
                       placeholder="e.g. 2100984712"
                       value={googleIqamaId}
                       onChange={(e) => setGoogleIqamaId(e.target.value.replace(/\D/g, ''))}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -904,10 +910,11 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                     <label className="block font-bold text-slate-300 mb-1">Passport Number (Optional)</label>
                     <input
                       type="text"
+                      disabled={!invitationData}
                       placeholder="e.g. N1029384"
                       value={googlePassportNumber}
                       onChange={(e) => setGooglePassportNumber(e.target.value.toUpperCase())}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono font-medium"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
                 </div>
@@ -916,17 +923,19 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                   <label className="block font-bold text-slate-300 mb-1">Phone Number (Optional)</label>
                   <input
                     type="text"
+                    disabled={!invitationData}
                     placeholder="e.g. +966 50 123 4567"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
 
                 <button
                   type="submit"
                   id="btn-submit-invite-register"
-                  className="w-full py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  disabled={!invitationData}
+                  className="w-full py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <CheckCircle2 className="w-4 h-4" /> Activate My Company Workspace
                 </button>

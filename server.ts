@@ -751,6 +751,8 @@ async function startServer() {
 
     // Automatically issue an initial Super Admin invitation for this tenant admin email
     const token = `inv-tok-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    newCompany.invitationToken = token;
+
     const newInvitation: RoleInvitation = {
       id: `inv-comp-${Date.now()}`,
       companyId: compId,
@@ -921,6 +923,7 @@ async function startServer() {
 
     // Create Invitation Token
     const token = `demo-tok-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    demoCompany.invitationToken = token;
     const newInvitation: RoleInvitation = {
       id: `inv-demo-${Date.now()}`,
       companyId: compId,
@@ -1320,16 +1323,105 @@ System Administration • LMS by Umar`;
     res.json({ success: true, message: `Invitation for ${inv.email} has been revoked.` });
   });
 
+  // Robust Token Verification endpoint supporting both paths and query params
+  app.get('/api/verify-invite', (req, res) => {
+    const token = (req.query.token as string || req.query.inviteToken as string || '');
+    const companyId = (req.query.company as string || req.query.companyId as string || '');
+
+    if (!token) {
+      return res.status(400).json({ valid: false, error: 'Invitation Error: Token is required.' });
+    }
+
+    // 1. Find in roleInvitations
+    let inv = roleInvitations.find(i => i.token === token);
+
+    // 2. Fallback: Find in company record
+    if (!inv && companyId) {
+      const comp = companies.find(c => c.id === companyId || c.id.toLowerCase() === companyId.toLowerCase() || (c.invitationToken && c.invitationToken === token));
+      if (comp && comp.invitationToken === token) {
+        inv = roleInvitations.find(i => i.companyId === comp.id && i.email.toLowerCase() === comp.adminEmail.toLowerCase());
+        if (!inv) {
+          inv = {
+            id: `inv-auto-${comp.id}`,
+            companyId: comp.id,
+            email: comp.adminEmail,
+            role: 'Super Admin',
+            token: token,
+            invitedBy: 'Platform Owner',
+            createdAt: comp.createdAt || new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            status: 'Pending'
+          };
+          roleInvitations.push(inv);
+        }
+      }
+    }
+
+    if (!inv) {
+      return res.status(404).json({ valid: false, error: 'Invitation Error: Invalid or non-existent invitation token.' });
+    }
+
+    if (companyId && inv.companyId !== companyId) {
+      const comp = companies.find(c => c.id === companyId);
+      if (!comp) {
+        return res.status(400).json({ valid: false, error: 'Invitation Error: Company tenant mismatch.' });
+      }
+    }
+
+    if (inv.status !== 'Pending') {
+      return res.status(400).json({ valid: false, error: `This invitation has already been ${inv.status.toLowerCase()}.` });
+    }
+
+    const companyDetails = companies.find(c => c.id === inv.companyId);
+
+    return res.json({
+      valid: true,
+      invitation: inv,
+      company: companyDetails,
+      email: inv.email
+    });
+  });
+
   app.get('/api/invitations/validate/:token', (req, res) => {
     const { token } = req.params;
-    const inv = roleInvitations.find(i => i.token === token);
+    const companyId = (req.query.company as string || req.query.companyId as string || '');
+    
+    let inv = roleInvitations.find(i => i.token === token);
+
+    if (!inv && companyId) {
+      const comp = companies.find(c => c.id === companyId || c.id.toLowerCase() === companyId.toLowerCase() || (c.invitationToken && c.invitationToken === token));
+      if (comp && comp.invitationToken === token) {
+        inv = roleInvitations.find(i => i.companyId === comp.id && i.email.toLowerCase() === comp.adminEmail.toLowerCase());
+        if (!inv) {
+          inv = {
+            id: `inv-auto-${comp.id}`,
+            companyId: comp.id,
+            email: comp.adminEmail,
+            role: 'Super Admin',
+            token: token,
+            invitedBy: 'Platform Owner',
+            createdAt: comp.createdAt || new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            status: 'Pending'
+          };
+          roleInvitations.push(inv);
+        }
+      }
+    }
+
     if (!inv) {
       return res.status(404).json({ valid: false, error: 'Invalid or non-existent invitation token.' });
     }
     if (inv.status !== 'Pending') {
       return res.status(400).json({ valid: false, error: `This invitation has already been ${inv.status.toLowerCase()}.` });
     }
-    res.json({ valid: true, invitation: inv });
+    const companyDetails = companies.find(c => c.id === inv.companyId);
+    res.json({
+      valid: true,
+      invitation: inv,
+      company: companyDetails,
+      email: inv.email
+    });
   });
 
   // ---------------------------------------------------------

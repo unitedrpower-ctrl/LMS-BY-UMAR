@@ -18,6 +18,7 @@ export interface Company {
   pricePaidSar: number;
   contactPhone?: string;
   isDemo?: boolean;
+  invitationToken?: string;
   createdAt: string;
   updatedAt?: string;
 }
