@@ -6,7 +6,6 @@ import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import ExcelJS from 'exceljs';
-import nodemailer from 'nodemailer';
 
 import { User, Site, Attendance, Payroll, Complaint, Notice, UserRole, RoleInvitation, Company, SubscriptionPlanType, DocumentItem } from './src/types.js';
 import { 
@@ -317,40 +316,8 @@ export function getAppBaseUrl(req?: Request): string {
   return 'https://lms-by-umar.onrender.com';
 }
 
-// Helper: Create Nodemailer Transporter with IPv4 Force & Gmail SMTP configuration
-export function createSmtpTransporter() {
-  const smtpHost = (process.env.SMTP_HOST || 'smtp.gmail.com').trim();
-  const rawPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
-  const smtpPort = rawPort || 587;
-  const isSecure = smtpPort === 465;
-  const smtpUser = process.env.SMTP_USER?.trim();
-  const smtpPass = process.env.SMTP_PASS?.trim();
-
-  if (!smtpUser || !smtpPass) {
-    console.warn('[SMTP ENGINE WARNING] SMTP_USER or SMTP_PASS is missing. Emails will be logged to console in simulation mode.');
-    return null;
-  }
-
-  return nodemailer.createTransport({
-    host: smtpHost,
-    port: smtpPort,
-    secure: isSecure,
-    family: 4,     // FORCE IPv4 ONLY to fix ENETUNREACH on Cloud environments
-    auth: {
-      user: smtpUser,
-      pass: smtpPass,
-    },
-    tls: {
-      rejectUnauthorized: false
-    },
-    connectionTimeout: 15000, // 15s connection handshake timeout
-    greetingTimeout: 15000,   // 15s SMTP greeting timeout
-    socketTimeout: 20000      // 20s socket idle timeout
-  } as any);
-}
-
 // =========================================================================
-// EXCLUSIVE GMAIL SMTP EMAIL NOTIFICATION ENGINE
+// PURE BREVO HTTP REST API EMAIL DISPATCHER (PORT 443 ZERO TIMEOUT ON RENDER)
 // =========================================================================
 export async function sendEmail(params: {
   to: string;
@@ -358,42 +325,67 @@ export async function sendEmail(params: {
   html: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string; method: string }> {
   const normalizedTo = params.to.trim().toLowerCase();
-  console.log(`[EXCLUSIVE SMTP DISPATCH] Target: "${normalizedTo}" | Subject: "${params.subject}"`);
+  console.log(`[BREVO HTTP DISPATCH] Target: "${normalizedTo}" | Subject: "${params.subject}"`);
 
-  const smtpTransporter = createSmtpTransporter();
-  if (smtpTransporter) {
-    try {
-      const smtpFrom = process.env.SMTP_FROM || `LMS by Umar <${process.env.SMTP_USER || 'umarchoudhary259@gmail.com'}>`;
-      const info = await smtpTransporter.sendMail({
-        from: smtpFrom,
-        to: normalizedTo,
-        subject: params.subject,
-        html: params.html
-      });
-      console.log(`[SMTP DISPATCH SUCCESS] MessageID: ${info.messageId}`);
-      return { success: true, messageId: info.messageId, method: 'SMTP' };
-    } catch (smtpErr: any) {
-      console.error(`[SMTP DISPATCH FAILED] Error: ${smtpErr.message}`);
-      return { success: false, error: smtpErr.message, method: 'SMTP_FAILED' };
-    }
+  const brevoApiKey = process.env.BREVO_API_KEY?.trim();
+  const senderEmail = process.env.SENDER_EMAIL?.trim() || 'unitedrpower@gmail.com';
+
+  if (!brevoApiKey || brevoApiKey.includes('your_api_key')) {
+    // Simulated fallback in case credentials are not defined
+    console.log(`\n======================================================`);
+    console.log(`🚨 [SIMULATED BREVO DISPATCH / DEV BYPASS]`);
+    console.log(`To: ${normalizedTo}`);
+    console.log(`Subject: ${params.subject}`);
+    console.log(`------------------------------------------------------`);
+    console.log(`BREVO_API_KEY is not defined or is placeholder. Emailed HTML was logged.`);
+    console.log(`======================================================\n`);
+    return { success: true, messageId: `simulated-brevo-id-${Date.now()}`, method: 'SIMULATION' };
   }
 
-  // Simulated fallback in case credentials are not defined
-  console.log(`\n======================================================`);
-  console.log(`🚨 [SIMULATED EMAIL DISPATCH / DEV BYPASS]`);
-  console.log(`To: ${normalizedTo}`);
-  console.log(`Subject: ${params.subject}`);
-  console.log(`------------------------------------------------------`);
-  console.log(`SMTP_USER / SMTP_PASS credentials missing in environment.`);
-  console.log(`======================================================\n`);
+  try {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': brevoApiKey,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        sender: {
+          name: 'LMS by Umar',
+          email: senderEmail
+        },
+        to: [
+          {
+            email: normalizedTo,
+            name: normalizedTo.split('@')[0]
+          }
+        ],
+        subject: params.subject,
+        htmlContent: params.html
+      })
+    });
 
-  return { success: true, messageId: `simulated-id-${Date.now()}`, method: 'SIMULATION' };
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[BREVO DISPATCH ERROR RESPONSE]:', errorText);
+      throw new Error(`Brevo HTTP Status ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json() as { messageId?: string };
+    const mId = data.messageId || `brevo-id-${Date.now()}`;
+    console.log(`[BREVO DISPATCH SUCCESS] MessageID: ${mId}`);
+    return { success: true, messageId: mId, method: 'BREVO_API' };
+  } catch (err: any) {
+    console.error(`[BREVO DISPATCH FAILED] Error: ${err.message}`);
+    return { success: false, error: err.message, method: 'BREVO_FAILED' };
+  }
 }
 
-// Automatic Email Invitation Dispatcher Service (Nodemailer / SMTP & Automated Email Service)
+// Automatic Email Invitation Dispatcher Service (Brevo HTTP & Automated Email Service)
 export interface EmailDispatchResult {
   sent: boolean;
-  method: 'SMTP' | 'AUTOMATED_SIMULATED_DISPATCH';
+  method: 'BREVO_API' | 'AUTOMATED_SIMULATED_DISPATCH';
   sentTo: string;
   messageId?: string;
   inviteUrl: string;
@@ -532,17 +524,17 @@ export async function sendClientInvitationEmail(params: {
 
   return {
     sent: emailRes.success,
-    method: emailRes.method === 'SMTP' ? 'SMTP' : 'AUTOMATED_SIMULATED_DISPATCH', // keep interface compatibility
+    method: emailRes.method === 'BREVO_API' ? 'BREVO_API' : 'AUTOMATED_SIMULATED_DISPATCH',
     sentTo: params.adminEmail,
     messageId: emailRes.messageId,
     inviteUrl,
     message: emailRes.success 
-      ? `✉️ Automated welcome email successfully dispatched to ${params.adminEmail} via unified ${emailRes.method} engine.`
+      ? `✉️ Automated welcome email successfully dispatched to ${params.adminEmail} via Brevo HTTP engine.`
       : `⚠️ Failed to send credentials email: ${emailRes.error || 'Unknown error'}`
   };
 }
 
-// Helper: Send Secure Master Owner Verification Email (OTP) via SMTP/Nodemailer
+// Helper: Send Secure Master Owner Verification Email (OTP) via Brevo HTTP REST API
 export async function sendOtpEmail(email: string, otpCode: string): Promise<boolean> {
   const htmlContent = `
   <!DOCTYPE html>
@@ -1954,11 +1946,11 @@ System Administration • LMS by Umar`;
     console.log(`MASTER OTP CODE: ${otpCode}`);
     console.log(`[Master Owner OTP] Generated 6-digit OTP for ${normalizedEmail}: ${otpCode}`);
 
-    // STRICT: Dispatch OTP directly and securely via SMTP/Logs (Non-blocking async execution)
+    // STRICT: Dispatch OTP directly and securely via Brevo HTTP/Logs (Non-blocking async execution)
     try {
       await sendOtpEmail(normalizedEmail, otpCode);
     } catch (otpErr: any) {
-      console.error(`[MASTER OTP ROUTE CATCH]: Non-fatal SMTP warning: ${otpErr?.message}`);
+      console.error(`[MASTER OTP ROUTE CATCH]: Non-fatal Brevo dispatch warning: ${otpErr?.message}`);
     }
 
     // Secure payload: Do NOT return otpCode
