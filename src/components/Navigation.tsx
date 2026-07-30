@@ -41,7 +41,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     { id: 'dashboard', label: userRole === 'Labor' ? t('workerPortal', 'My Worker Portal') : t('dashboard', 'Dashboard'), icon: LayoutDashboard, roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor', 'Labor'] },
     { id: 'saas_owner', label: 'SaaS Tenants & Billing', icon: Crown, roles: ['Owner'] },
     { id: 'attendance', label: userRole === 'Labor' ? 'My Attendance' : t('attendance', 'Attendance'), icon: CalendarCheck, roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor', 'Labor'] },
-    { id: 'payroll', label: userRole === 'Labor' ? 'My Payslips' : t('payroll', 'Payroll'), icon: DollarSign, roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor', 'Labor'] },
+    { id: 'payroll', label: t('payroll', 'Payroll'), icon: DollarSign, roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor'] },
     { 
       id: 'complaints', 
       label: userRole === 'Labor' ? 'Submit Feedback' : t('complaints', 'Complaints'), 

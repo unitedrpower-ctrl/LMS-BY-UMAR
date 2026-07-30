@@ -546,6 +546,7 @@ export default function App() {
             users={users}
             currentUser={currentUser}
             onSaveAttendance={handleSaveAttendanceRecords}
+            payrolls={payrolls}
           />
         );
       case 'payroll':

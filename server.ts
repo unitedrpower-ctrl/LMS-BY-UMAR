@@ -2449,6 +2449,40 @@ System Administration • LMS by Umar`;
     res.json(filtered);
   });
 
+  // GET /api/worker/my-attendance - Strictly returns the authenticated worker's attendance records
+  app.get('/api/worker/my-attendance', (req: AuthenticatedRequest, res) => {
+    if (!req.currentUser) {
+      return res.status(401).json({ error: 'Unauthorized: No session active.' });
+    }
+    
+    const targetUserId = req.currentUser.id;
+    const targetTenantId = req.companyId || 'comp-001';
+
+    // Strict multi-tenant data isolation: filter by both user_id AND companyId
+    const filtered = attendanceRecords.filter(
+      (a) => a.userId === targetUserId && (a.companyId || 'comp-001') === targetTenantId
+    );
+
+    res.json(filtered);
+  });
+
+  // GET /api/worker/my-salary - Strictly returns the authenticated worker's payroll records
+  app.get('/api/worker/my-salary', (req: AuthenticatedRequest, res) => {
+    if (!req.currentUser) {
+      return res.status(401).json({ error: 'Unauthorized: No session active.' });
+    }
+    
+    const targetUserId = req.currentUser.id;
+    const targetTenantId = req.companyId || 'comp-001';
+
+    // Strict multi-tenant data isolation: filter by both user_id AND companyId
+    const filtered = payrolls.filter(
+      (p) => p.userId === targetUserId && (p.companyId || 'comp-001') === targetTenantId
+    );
+
+    res.json(filtered);
+  });
+
   // POST /api/attendance - Marks attendance & automatically recalculates monthly salary
   app.post('/api/attendance', (req: AuthenticatedRequest, res) => {
     // RBAC Check: Only Super Admin, HR Admin, or Site Supervisor can mark attendance

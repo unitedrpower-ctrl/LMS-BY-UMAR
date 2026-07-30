@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Attendance, Site, User, AttendanceStatus } from '../../types';
+import { Attendance, Site, User, AttendanceStatus, Payroll } from '../../types';
 import { 
   CalendarCheck, 
   Building2, 
@@ -14,7 +14,13 @@ import {
   Printer,
   ShieldCheck,
   CheckSquare,
-  Square
+  Square,
+  DollarSign,
+  Calendar,
+  TrendingUp,
+  Coins,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 interface AttendanceViewProps {
@@ -23,6 +29,7 @@ interface AttendanceViewProps {
   users: User[];
   currentUser: User;
   onSaveAttendance: (records: Attendance[]) => void;
+  payrolls?: Payroll[];
 }
 
 export const AttendanceView: React.FC<AttendanceViewProps> = ({
@@ -30,7 +37,8 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   sites,
   users,
   currentUser,
-  onSaveAttendance
+  onSaveAttendance,
+  payrolls = []
 }) => {
   const todayStr = new Date().toISOString().split('T')[0];
   const [selectedDate, setSelectedDate] = useState(todayStr);
@@ -481,51 +489,293 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
   // If user is Labor worker, render Personal Attendance Dashboard
   if (currentUser.role === 'Labor') {
+    // Generate calendar cells for selected Month
+    const firstDayIndex = new Date(yearNum, monthNum - 1, 1).getDay();
+    const totalDaysInMonth = new Date(yearNum, monthNum, 0).getDate();
+    
+    const calendarCells = [];
+    for (let i = 0; i < firstDayIndex; i++) {
+      calendarCells.push({ day: null, dateStr: '' });
+    }
+    for (let d = 1; d <= totalDaysInMonth; d++) {
+      const dateStr = `${yearNum}-${String(monthNum).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      calendarCells.push({ day: d, dateStr });
+    }
+
+    // Get salary details
+    const myMonthPayroll = payrolls.find(
+      (p) => p.userId === currentUser.id && p.monthYear === selectedMonth
+    );
+
+    const dailyRate = currentUser.dailyRate || 60.0;
+    const monthAttendance = displayAttendance.filter((a) => a.date.startsWith(selectedMonth));
+    const currentMonthPresentCount = monthAttendance.filter((a) => a.status === 'Present').length;
+    const currentMonthHalfDayCount = monthAttendance.filter((a) => a.status === 'Half-Day' || a.status === 'Half Day').length;
+    const currentMonthAbsentCount = monthAttendance.filter((a) => a.status === 'Absent').length;
+    const currentMonthOtHours = monthAttendance.reduce((sum, a) => sum + (a.overtimeHours || 0), 0);
+
+    const hasPayroll = !!myMonthPayroll;
+    const baseSalary = hasPayroll
+      ? (myMonthPayroll.dailyRate * (myMonthPayroll.presentDays + myMonthPayroll.halfDays * 0.5))
+      : (dailyRate * (currentMonthPresentCount + currentMonthHalfDayCount * 0.5));
+
+    const overtimeAllowance = hasPayroll
+      ? (myMonthPayroll.overtimePay || 0)
+      : (currentMonthOtHours * (dailyRate / 8) * 2.0);
+
+    const advancesDeducted = hasPayroll
+      ? (myMonthPayroll.advances || 0)
+      : 0;
+
+    const penalties = hasPayroll ? (myMonthPayroll.penalties || 0) : 0;
+    const allowances = hasPayroll ? (myMonthPayroll.allowances || 0) : 0;
+    const fridayPay = hasPayroll ? (myMonthPayroll.fridayPay || 0) : 0;
+    const govHolidayPay = hasPayroll ? (myMonthPayroll.govHolidayPay || 0) : 0;
+
+    const finalNetSalary = hasPayroll
+      ? myMonthPayroll.netSalary
+      : Math.max(0, baseSalary + overtimeAllowance + allowances + fridayPay + govHolidayPay - advancesDeducted - penalties);
+
+    const getMonthName = (mNum: number) => {
+      return [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ][mNum - 1] || '';
+    };
+
     return (
       <div id="view-attendance-labor" className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+        {/* Worker Portal Header Section */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-5">
           <div>
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              <CalendarCheck className="w-5 h-5 text-indigo-600" />
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <CalendarCheck className="w-6 h-6 text-indigo-600" />
               My Attendance Record & Work Logs
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              Personal attendance history and overtime hours logged by site supervisors.
+              Personal attendance history, monthly calendar visualization, and private salary breakdown.
             </p>
           </div>
-          <span className="px-3 py-1 bg-amber-100 text-amber-900 font-bold text-xs rounded-full border border-amber-300">
-            Worker ID: {currentUser.loginSerial || currentUser.id}
-          </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="px-3.5 py-1.5 bg-indigo-50 text-indigo-700 font-bold text-xs rounded-full border border-indigo-200">
+              👷 Worker ID: {currentUser.loginSerial || currentUser.id}
+            </span>
+            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-xs">
+              <span className="text-xs font-bold text-slate-500 whitespace-nowrap">View Month:</span>
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="bg-transparent border-none text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Worker Personal Attendance Metric Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-            <span className="text-[10px] font-bold uppercase text-slate-400 block">Days Present</span>
-            <span className="text-2xl font-black text-emerald-600">{myPresentCount} days</span>
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Days Present</span>
+            <span className="text-2xl font-black text-emerald-600 mt-1 block">{myPresentCount} days</span>
             <span className="text-[11px] text-slate-500 block mt-1">Full 1.0 Day Wage</span>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-            <span className="text-[10px] font-bold uppercase text-slate-400 block">Half-Days</span>
-            <span className="text-2xl font-black text-amber-600">{myHalfDayCount} days</span>
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Half-Days</span>
+            <span className="text-2xl font-black text-amber-500 mt-1 block">{myHalfDayCount} days</span>
             <span className="text-[11px] text-slate-500 block mt-1">0.5 Day Wage</span>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-            <span className="text-[10px] font-bold uppercase text-slate-400 block">Absences</span>
-            <span className="text-2xl font-black text-rose-600">{myAbsentCount} days</span>
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Absences</span>
+            <span className="text-2xl font-black text-rose-600 mt-1 block">{myAbsentCount} days</span>
             <span className="text-[11px] text-slate-500 block mt-1">Unapproved Absence</span>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-            <span className="text-[10px] font-bold uppercase text-slate-400 block">Overtime Hours</span>
-            <span className="text-2xl font-black text-indigo-600">{myTotalOtHours} hrs</span>
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Overtime Hours</span>
+            <span className="text-2xl font-black text-indigo-600 mt-1 block">{myTotalOtHours} hrs</span>
             <span className="text-[11px] text-slate-500 block mt-1">Multiplier Applied</span>
           </div>
         </div>
 
-        {/* Worker Personal Attendance Table */}
+        {/* Calendar View & Personalized My Salary Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Calendar View Attendance Section */}
+          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-indigo-600" />
+                Calendar View Attendance — {getMonthName(monthNum)} {yearNum}
+              </h3>
+            </div>
+
+            {/* Grid Calendar Layout */}
+            <div className="grid grid-cols-7 gap-1.5 text-center text-xs font-bold border-t border-slate-100 pt-3">
+              {/* Day headers */}
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((dHeader) => (
+                <div key={dHeader} className="py-2 text-slate-400 text-[10px] uppercase tracking-wider">
+                  {dHeader}
+                </div>
+              ))}
+
+              {/* Day Cells */}
+              {calendarCells.map((cell, idx) => {
+                const isToday = cell.dateStr === todayStr;
+                const att = cell.day ? displayAttendance.find(a => a.date === cell.dateStr) : null;
+                
+                // Color Dot Logic
+                let dotColor = '';
+                let statusLabel = '';
+                if (att) {
+                  const statusLower = att.status?.toLowerCase();
+                  if (att.overtimeHours && att.overtimeHours > 0) {
+                    dotColor = 'bg-[#a855f7]'; // Overtime
+                    statusLabel = 'Overtime';
+                  } else if (statusLower === 'leave') {
+                    dotColor = 'bg-[#06b6d4]'; // Leave
+                    statusLabel = 'Leave';
+                  } else if (statusLower === 'present') {
+                    dotColor = 'bg-[#22c55e]'; // Present
+                    statusLabel = 'Present';
+                  } else if (statusLower === 'absent') {
+                    dotColor = 'bg-[#ef4444]'; // Absent
+                    statusLabel = 'Absent';
+                  } else if (statusLower === 'half-day' || statusLower === 'half day') {
+                    dotColor = 'bg-[#eab308]'; // Half Day
+                    statusLabel = 'Half Day';
+                  } else {
+                    dotColor = 'bg-slate-400';
+                    statusLabel = att.status;
+                  }
+                }
+
+                return (
+                  <div
+                    key={`${cell.dateStr}-${idx}`}
+                    className={`min-h-[56px] p-1 border rounded-xl flex flex-col justify-between transition-all ${
+                      cell.day
+                        ? isToday
+                          ? 'bg-indigo-50/50 border-indigo-500 text-indigo-950 font-black'
+                          : 'bg-slate-50/50 border-slate-200 text-slate-800'
+                        : 'bg-slate-50/20 border-transparent text-slate-300'
+                    }`}
+                  >
+                    {cell.day ? (
+                      <>
+                        <span className="text-[11px] self-start leading-none">{cell.day}</span>
+                        {dotColor ? (
+                          <div className="flex flex-col items-center gap-0.5 mt-auto">
+                            <span className={`w-2.5 h-2.5 rounded-full ${dotColor} shadow-xs`} title={statusLabel} />
+                            {att && att.overtimeHours && att.overtimeHours > 0 ? (
+                              <span className="text-[8px] font-extrabold text-purple-700 leading-none">
+                                +{att.overtimeHours}h
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-[8px] text-slate-300 italic self-center mt-auto">—</span>
+                        )}
+                      </>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Colored Dots Legend */}
+            <div className="flex flex-wrap gap-4 items-center justify-center bg-slate-50 border border-slate-100 p-3 rounded-2xl text-[11px] font-bold text-slate-600 mt-4">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#22c55e]" />
+                <span>Present</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444]" />
+                <span>Absent</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#eab308]" />
+                <span>Half Day</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#06b6d4]" />
+                <span>Leave</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#a855f7]" />
+                <span>Overtime</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Personalized "My Salary" Card Only */}
+          <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-md border border-slate-800 flex flex-col justify-between">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
+                <Coins className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">My Salary Card</h3>
+                  <p className="text-[10px] text-slate-400 font-medium">{getMonthName(monthNum)} {yearNum}</p>
+                </div>
+              </div>
+
+              {/* Salary Breakdown Elements */}
+              <div className="space-y-3 pt-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Daily Rate SAR</span>
+                  <span className="font-mono font-bold text-slate-200">SAR {dailyRate.toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Base Earned ({currentMonthPresentCount + currentMonthHalfDayCount * 0.5} Days)</span>
+                  <span className="font-mono font-bold text-slate-200">SAR {baseSalary.toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Overtime Allowance</span>
+                  <span className="font-mono font-bold text-[#a855f7]">SAR {overtimeAllowance.toFixed(2)}</span>
+                </div>
+                {allowances > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Other Allowances</span>
+                    <span className="font-mono font-bold text-emerald-400">SAR {allowances.toFixed(2)}</span>
+                  </div>
+                )}
+                {fridayPay > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Friday Paid Holidays</span>
+                    <span className="font-mono font-bold text-emerald-400">SAR {fridayPay.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between border-t border-slate-800 pt-3">
+                  <span className="text-slate-400">Advances Deducted</span>
+                  <span className="font-mono font-bold text-rose-400">-SAR {advancesDeducted.toFixed(2)}</span>
+                </div>
+                {penalties > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Penalties / Deductions</span>
+                    <span className="font-mono font-bold text-rose-400">-SAR {penalties.toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Giant spotlight Net Salary Box */}
+            <div className="mt-8 pt-4 border-t border-slate-800 space-y-2">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block text-center">
+                Final Net Salary
+              </span>
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl py-4 px-3 text-center">
+                <span className="text-3xl font-black text-[#22c55e] font-mono block">
+                  SAR {finalNetSalary.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-1">
+                  {hasPayroll ? '✅ Final Compiled Salary Statement' : '📊 Calculated Live Estimate'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Worker Personal Attendance Log List */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
           <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
             <CalendarCheck className="w-4 h-4 text-indigo-600" />
