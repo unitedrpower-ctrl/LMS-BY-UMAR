@@ -7,7 +7,6 @@ import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import ExcelJS from 'exceljs';
 import nodemailer from 'nodemailer';
-import { Resend } from 'resend';
 
 import { User, Site, Attendance, Payroll, Complaint, Notice, UserRole, RoleInvitation, Company, SubscriptionPlanType, DocumentItem } from './src/types.js';
 import { 
@@ -318,17 +317,17 @@ export function getAppBaseUrl(req?: Request): string {
   return 'https://lms-by-umar.onrender.com';
 }
 
-// Helper: Create Nodemailer Transporter with IPv4 Force & Robust Timeout Settings
+// Helper: Create Nodemailer Transporter with IPv4 Force & Gmail SMTP configuration
 export function createSmtpTransporter() {
   const smtpHost = (process.env.SMTP_HOST || 'smtp.gmail.com').trim();
-  const rawPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
-  // Standard stability: default port 587 with STARTTLS (secure: false) unless explicitly port 465
-  const smtpPort = rawPort || 587;
+  const rawPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 465;
+  const smtpPort = rawPort || 465;
   const isSecure = smtpPort === 465;
   const smtpUser = process.env.SMTP_USER?.trim();
   const smtpPass = process.env.SMTP_PASS?.trim();
 
   if (!smtpUser || !smtpPass) {
+    console.warn('[SMTP ENGINE WARNING] SMTP_USER or SMTP_PASS is missing. Emails will be logged to console in simulation mode.');
     return null;
   }
 
@@ -352,54 +351,16 @@ export function createSmtpTransporter() {
 }
 
 // =========================================================================
-// UNIFIED EMAIL NOTIFICATION SYSTEM (RESEND ENGINE & SMTP FALLBACK)
+// EXCLUSIVE GMAIL SMTP EMAIL NOTIFICATION ENGINE
 // =========================================================================
-const resendApiKey = process.env.RESEND_API_KEY?.trim();
-const fromEmail = process.env.FROM_EMAIL || 'onboarding@resend.dev';
-
-let resendClient: Resend | null = null;
-try {
-  if (resendApiKey && !resendApiKey.includes('your_api_key') && !resendApiKey.includes('re_your_api_key')) {
-    resendClient = new Resend(resendApiKey);
-    console.log(`[RESEND ENGINE INITIALIZED] API Key configured successfully. Sender: ${fromEmail}`);
-  } else {
-    console.log('[RESEND ENGINE WARNING] RESEND_API_KEY is not defined or is placeholder. Falling back to SMTP Transporter or Simulated Logging.');
-  }
-} catch (resendInitErr: any) {
-  console.warn('[RESEND ENGINE INITIALIZATION ERROR] Safely caught error during Resend initialization:', resendInitErr.message);
-}
-
 export async function sendEmail(params: {
   to: string;
   subject: string;
   html: string;
 }): Promise<{ success: boolean; messageId?: string; error?: string; method: string }> {
   const normalizedTo = params.to.trim().toLowerCase();
-  console.log(`[UNIFIED EMAIL DISPATCH] Target: "${normalizedTo}" | Subject: "${params.subject}"`);
+  console.log(`[EXCLUSIVE SMTP DISPATCH] Target: "${normalizedTo}" | Subject: "${params.subject}"`);
 
-  if (resendClient) {
-    try {
-      const res = await resendClient.emails.send({
-        from: fromEmail,
-        to: normalizedTo,
-        subject: params.subject,
-        html: params.html
-      });
-
-      if (res.error) {
-        console.error('[RESEND DISPATCH ERROR RESPONSE]:', res.error);
-        throw new Error(res.error.message);
-      }
-
-      const mId = res.data?.id || `resend-id-${Date.now()}`;
-      console.log(`[RESEND DISPATCH SUCCESS] MessageID: ${mId}`);
-      return { success: true, messageId: mId, method: 'RESEND' };
-    } catch (err: any) {
-      console.error(`[RESEND DISPATCH FAILED] Error: ${err.message}. Attempting SMTP Fallback...`);
-    }
-  }
-
-  // SMTP Fallback
   const smtpTransporter = createSmtpTransporter();
   if (smtpTransporter) {
     try {
@@ -410,16 +371,23 @@ export async function sendEmail(params: {
         subject: params.subject,
         html: params.html
       });
-      console.log(`[SMTP FALLBACK SUCCESS] MessageID: ${info.messageId}`);
+      console.log(`[SMTP DISPATCH SUCCESS] MessageID: ${info.messageId}`);
       return { success: true, messageId: info.messageId, method: 'SMTP' };
     } catch (smtpErr: any) {
-      console.error(`[SMTP FALLBACK FAILED] Error: ${smtpErr.message}`);
+      console.error(`[SMTP DISPATCH FAILED] Error: ${smtpErr.message}`);
       return { success: false, error: smtpErr.message, method: 'SMTP_FAILED' };
     }
   }
 
-  // Simulated fallback
-  console.log(`[SIMULATED DISPATCH ONLY] Both Resend and SMTP configurations are inactive. Emailed HTML was logged.`);
+  // Simulated fallback in case credentials are not defined
+  console.log(`\n======================================================`);
+  console.log(`🚨 [SIMULATED EMAIL DISPATCH / DEV BYPASS]`);
+  console.log(`To: ${normalizedTo}`);
+  console.log(`Subject: ${params.subject}`);
+  console.log(`------------------------------------------------------`);
+  console.log(`SMTP_USER / SMTP_PASS credentials missing in environment.`);
+  console.log(`======================================================\n`);
+
   return { success: true, messageId: `simulated-id-${Date.now()}`, method: 'SIMULATION' };
 }
 
@@ -565,7 +533,7 @@ export async function sendClientInvitationEmail(params: {
 
   return {
     sent: emailRes.success,
-    method: emailRes.method === 'RESEND' ? 'SMTP' : 'AUTOMATED_SIMULATED_DISPATCH', // keep interface compatibility
+    method: emailRes.method === 'SMTP' ? 'SMTP' : 'AUTOMATED_SIMULATED_DISPATCH', // keep interface compatibility
     sentTo: params.adminEmail,
     messageId: emailRes.messageId,
     inviteUrl,
