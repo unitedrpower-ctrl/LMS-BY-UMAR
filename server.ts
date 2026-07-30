@@ -320,8 +320,8 @@ export function getAppBaseUrl(req?: Request): string {
 // Helper: Create Nodemailer Transporter with IPv4 Force & Gmail SMTP configuration
 export function createSmtpTransporter() {
   const smtpHost = (process.env.SMTP_HOST || 'smtp.gmail.com').trim();
-  const rawPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 465;
-  const smtpPort = rawPort || 465;
+  const rawPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
+  const smtpPort = rawPort || 587;
   const isSecure = smtpPort === 465;
   const smtpUser = process.env.SMTP_USER?.trim();
   const smtpPass = process.env.SMTP_PASS?.trim();
@@ -335,15 +335,14 @@ export function createSmtpTransporter() {
     host: smtpHost,
     port: smtpPort,
     secure: isSecure,
+    family: 4,     // FORCE IPv4 ONLY to fix ENETUNREACH on Cloud environments
     auth: {
       user: smtpUser,
       pass: smtpPass,
     },
     tls: {
-      rejectUnauthorized: false,
-      ciphers: 'SSLv3'
+      rejectUnauthorized: false
     },
-    family: 4, // CRITICAL IPv4 FORCE: Prevents ENETUNREACH IPv6 errors on shared/cloud hosts like Render
     connectionTimeout: 15000, // 15s connection handshake timeout
     greetingTimeout: 15000,   // 15s SMTP greeting timeout
     socketTimeout: 20000      // 20s socket idle timeout
