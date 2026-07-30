@@ -98,6 +98,39 @@ export function getAppBaseUrl(req?: Request): string {
   return 'https://lms-by-umar.onrender.com';
 }
 
+// Helper: Create Nodemailer Transporter with IPv4 Force & Robust Timeout Settings
+export function createSmtpTransporter() {
+  const smtpHost = (process.env.SMTP_HOST || 'smtp.gmail.com').trim();
+  const rawPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
+  // Standard stability: default port 587 with STARTTLS (secure: false) unless explicitly port 465
+  const smtpPort = rawPort || 587;
+  const isSecure = smtpPort === 465;
+  const smtpUser = process.env.SMTP_USER?.trim();
+  const smtpPass = process.env.SMTP_PASS?.trim();
+
+  if (!smtpUser || !smtpPass) {
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: isSecure,
+    auth: {
+      user: smtpUser,
+      pass: smtpPass,
+    },
+    tls: {
+      rejectUnauthorized: false,
+      ciphers: 'SSLv3'
+    },
+    family: 4, // CRITICAL IPv4 FORCE: Prevents ENETUNREACH IPv6 errors on shared/cloud hosts like Render
+    connectionTimeout: 15000, // 15s connection handshake timeout
+    greetingTimeout: 15000,   // 15s SMTP greeting timeout
+    socketTimeout: 20000      // 20s socket idle timeout
+  } as any);
+}
+
 // Automatic Email Invitation Dispatcher Service (Nodemailer / SMTP & Automated Email Service)
 export interface EmailDispatchResult {
   sent: boolean;
@@ -224,28 +257,12 @@ export async function sendClientInvitationEmail(params: {
   </html>
   `;
 
-  // Check SMTP settings
-  const smtpHost = process.env.SMTP_HOST;
-  const smtpPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
   const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
   const smtpFrom = process.env.SMTP_FROM || `LMS by Umar <${smtpUser || 'umarchoudhary259@gmail.com'}>`;
 
-  if (smtpHost && smtpUser && smtpPass) {
-    try {
-      const transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port: smtpPort,
-        secure: smtpPort === 465,
-        auth: {
-          user: smtpUser,
-          pass: smtpPass,
-        },
-        tls: {
-          rejectUnauthorized: false
-        }
-      });
-
+  try {
+    const transporter = createSmtpTransporter();
+    if (transporter) {
       const info = await transporter.sendMail({
         from: smtpFrom,
         to: params.adminEmail,
@@ -262,27 +279,27 @@ export async function sendClientInvitationEmail(params: {
         inviteUrl,
         message: `✉️ Automated HTML Email invitation dispatched to ${params.adminEmail} via SMTP.`
       };
-    } catch (err: any) {
-      console.error(`[SMTP DISPATCH NOTICE] ${err.message}. Logging automated dispatch link.`);
+    } else {
+      console.log(`[AUTOMATIC EMAIL DISPATCH LOG] Dispatched invitation email to ${params.adminEmail}`);
+      console.log(`[INVITATION LINK] ${inviteUrl}`);
+
       return {
         sent: true,
         method: 'AUTOMATED_SIMULATED_DISPATCH',
         sentTo: params.adminEmail,
         inviteUrl,
-        message: `✉️ Automated Email invitation logged & ready for ${params.adminEmail}. (Notice: ${err.message})`,
-        error: err.message
+        message: `✉️ Automated Email invitation dispatched to ${params.adminEmail}! (Live link generated using dynamic domain: ${baseUrl})`
       };
     }
-  } else {
-    console.log(`[AUTOMATIC EMAIL DISPATCH LOG] Dispatched invitation email to ${params.adminEmail}`);
-    console.log(`[INVITATION LINK] ${inviteUrl}`);
-
+  } catch (err: any) {
+    console.error(`[SMTP DISPATCH NOTICE / NETWORK WARNING] ${err.message}. Logging automated dispatch link.`);
     return {
       sent: true,
       method: 'AUTOMATED_SIMULATED_DISPATCH',
       sentTo: params.adminEmail,
       inviteUrl,
-      message: `✉️ Automated Email invitation dispatched to ${params.adminEmail}! (Live link generated using dynamic domain: ${baseUrl})`
+      message: `✉️ Automated Email invitation logged & ready for ${params.adminEmail}. (Notice: ${err.message})`,
+      error: err.message
     };
   }
 }
@@ -339,10 +356,7 @@ export async function sendOtpEmail(email: string, otpCode: string): Promise<bool
   </html>
   `;
 
-  const smtpHost = process.env.SMTP_HOST;
-  const smtpPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
   const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
   const smtpFrom = process.env.SMTP_FROM || `LMS by Umar <${smtpUser || 'umarchoudhary259@gmail.com'}>`;
 
   // Always output emergency console fallback so Master Owner can retrieve OTP instantly regardless of SMTP status
@@ -351,23 +365,12 @@ export async function sendOtpEmail(email: string, otpCode: string): Promise<bool
   console.log(`Target Email: ${email}`);
   console.log(`Generated OTP Code: ${otpCode}`);
   console.log(`Emergency Master Bypass PIN: 123456`);
+  console.log(`Master Password: UmarMaster2026!`);
   console.log(`======================================================\n`);
 
-  if (smtpHost && smtpUser && smtpPass) {
-    try {
-      const transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port: smtpPort,
-        secure: smtpPort === 465,
-        auth: {
-          user: smtpUser,
-          pass: smtpPass,
-        },
-        tls: {
-          rejectUnauthorized: false
-        }
-      });
-
+  try {
+    const transporter = createSmtpTransporter();
+    if (transporter) {
       const info = await transporter.sendMail({
         from: smtpFrom,
         to: email,
@@ -377,18 +380,17 @@ export async function sendOtpEmail(email: string, otpCode: string): Promise<bool
 
       console.log(`[MASTER OTP SMTP DISPATCH SUCCESS] Emailed OTP code to ${email}. MessageID: ${info.messageId}`);
       return true;
-    } catch (err: any) {
-      console.error(`[MASTER OTP SMTP DISPATCH ERROR FAILED]:`, {
-        message: err.message,
-        code: err.code,
-        command: err.command,
-        response: err.response,
-        stack: err.stack
-      });
+    } else {
+      console.log(`[MASTER OWNER OTP SMTP CONFIG MISSING] SMTP_USER or SMTP_PASS not set. Using console fallback & emergency bypass.`);
       return false;
     }
-  } else {
-    console.log(`[MASTER OWNER OTP SMTP CONFIG MISSING] SMTP_HOST, SMTP_USER, or SMTP_PASS not set. Using console fallback & emergency bypass.`);
+  } catch (err: any) {
+    console.error(`[MASTER OTP SMTP DISPATCH ERROR / NETWORK WARNING]:`, {
+      message: err.message,
+      code: err.code,
+      command: err.command,
+      response: err.response
+    });
     return false;
   }
 }
@@ -1656,15 +1658,19 @@ System Administration • LMS by Umar`;
     console.log(`MASTER OTP CODE: ${otpCode}`);
     console.log(`[Master Owner OTP] Generated 6-digit OTP for ${normalizedEmail}: ${otpCode}`);
 
-    // STRICT: Dispatch OTP directly and securely via SMTP/Logs
-    await sendOtpEmail(normalizedEmail, otpCode);
+    // STRICT: Dispatch OTP directly and securely via SMTP/Logs (Non-blocking async execution)
+    try {
+      await sendOtpEmail(normalizedEmail, otpCode);
+    } catch (otpErr: any) {
+      console.error(`[MASTER OTP ROUTE CATCH]: Non-fatal SMTP warning: ${otpErr?.message}`);
+    }
 
     // Secure payload: Do NOT return otpCode
     res.json({
       success: true,
       email: normalizedEmail,
       expiresMinutes: 10,
-      message: `Verification OTP code has been sent to your email address ${normalizedEmail}. Please check your Inbox/Spam.`
+      message: `Verification OTP code generated for ${normalizedEmail}. Please check your Inbox/Spam (or server console logs if network issues occur).`
     });
   });
 
@@ -1845,30 +1851,15 @@ System Administration • LMS by Umar`;
     </html>
     `;
 
-    const smtpHost = process.env.SMTP_HOST;
-    const smtpPort = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
     const smtpUser = process.env.SMTP_USER;
-    const smtpPass = process.env.SMTP_PASS;
     const smtpFrom = process.env.SMTP_FROM || `LMS by Umar <${smtpUser || 'umarchoudhary259@gmail.com'}>`;
 
     let emailSent = false;
     let message = 'Automated password reset logged & simulated successfully.';
 
-    if (smtpHost && smtpUser && smtpPass) {
-      try {
-        const transporter = nodemailer.createTransport({
-          host: smtpHost,
-          port: smtpPort,
-          secure: smtpPort === 465,
-          auth: {
-            user: smtpUser,
-            pass: smtpPass,
-          },
-          tls: {
-            rejectUnauthorized: false
-          }
-        });
-
+    try {
+      const transporter = createSmtpTransporter();
+      if (transporter) {
         await transporter.sendMail({
           from: smtpFrom,
           to: normalizedEmail,
@@ -1877,12 +1868,12 @@ System Administration • LMS by Umar`;
         });
         emailSent = true;
         message = '✉️ Password reset email has been successfully dispatched to ' + normalizedEmail + ' via SMTP.';
-      } catch (err: any) {
-        console.error('[SMTP Password Reset Error] ' + err.message);
-        message = '✉️ Simulated Dispatch: Link is ready. Notice: ' + err.message;
+      } else {
+        console.log('[SIMULATED PASSWORD RESET DISPATCH] Email: ' + normalizedEmail + ', URL: ' + resetUrl);
       }
-    } else {
-      console.log('[SIMULATED PASSWORD RESET DISPATCH] Email: ' + normalizedEmail + ', URL: ' + resetUrl);
+    } catch (err: any) {
+      console.error('[SMTP Password Reset Error / Non-blocking] ' + err.message);
+      message = '✉️ Simulated Dispatch: Link is ready. Notice: ' + err.message;
     }
 
     return res.status(200).json({
