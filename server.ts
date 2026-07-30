@@ -1266,6 +1266,28 @@ Platform Administration • LMS by Umar`;
     res.json(tenantUsers);
   });
 
+  // Strict Scoped Single User / Labor Fetching, Profile Links & QR Code Resolution
+  app.get(['/api/users/:id', '/api/labor/:id', '/api/labor-profile/:id', '/api/labor/qr-resolve/:id'], (req: AuthenticatedRequest, res) => {
+    const { id } = req.params;
+    const user = users.find(u => u.id === id);
+    if (!user) {
+      return res.status(404).json({ error: 'Labor record not found.' });
+    }
+
+    // Strict Multi-Tenant Isolation Check:
+    if (req.userRole !== 'Owner') {
+      const userCompanyId = user.companyId || 'comp-001';
+      const reqCompanyId = req.companyId || 'comp-001';
+      if (userCompanyId !== reqCompanyId) {
+        return res.status(403).json({ 
+          error: 'Access Denied: Labor record does not belong to this organization.' 
+        });
+      }
+    }
+
+    res.json(user);
+  });
+
   // Secure Super Admin & Owner query for pending approvals
   app.get('/api/admin/pending-approvals', (req: AuthenticatedRequest, res) => {
     if (req.userRole !== 'Super Admin' && req.userRole !== 'Owner' && req.userRole !== 'HR Admin') {
@@ -1314,6 +1336,11 @@ Platform Administration • LMS by Umar`;
       return res.status(404).json({ error: 'User not found.' });
     }
     const deletedUser = users[index];
+
+    // Strict multi-tenant isolation check:
+    if (req.userRole !== 'Owner' && (deletedUser.companyId || 'comp-001') !== req.companyId) {
+      return res.status(403).json({ error: 'Access Denied: Labor record does not belong to this organization.' });
+    }
     
     // Hard Delete: Remove user from array
     users.splice(index, 1);
@@ -1343,6 +1370,11 @@ Platform Administration • LMS by Umar`;
     const user = users.find(u => u.id === id);
     if (!user) {
       return res.status(404).json({ error: 'User not found.' });
+    }
+
+    // Strict multi-tenant isolation check:
+    if (req.userRole !== 'Owner' && (user.companyId || 'comp-001') !== req.companyId) {
+      return res.status(403).json({ error: 'Access Denied: Labor record does not belong to this organization.' });
     }
     
     // Secure simulated bcrypt hashing mechanism
@@ -1394,6 +1426,10 @@ Platform Administration • LMS by Umar`;
 
     const idx = users.findIndex(u => u.id === userData.id);
     if (idx >= 0) {
+      // Strict multi-tenant isolation guard for updates
+      if (req.userRole !== 'Owner' && (users[idx].companyId || 'comp-001') !== req.companyId) {
+        return res.status(403).json({ error: 'Access Denied: Labor record does not belong to this organization.' });
+      }
       users[idx] = userData;
     } else {
       users.push(userData);
@@ -1584,7 +1620,12 @@ Platform Administration • LMS by Umar`;
     if (req.userRole !== 'Owner' && req.userRole !== 'Super Admin') {
       return res.status(403).json({ error: 'Forbidden: Only Owner or Super Admin can view invitations.' });
     }
-    res.json(roleInvitations);
+    if (req.userRole === 'Owner') {
+      return res.json(roleInvitations);
+    }
+    // Filter exclusively by the logged-in user's tenant_id (companyId)
+    const tenantInvitations = roleInvitations.filter(inv => (inv.companyId || 'comp-001') === req.companyId);
+    res.json(tenantInvitations);
   });
 
   app.post('/api/owner/invitations', async (req: AuthenticatedRequest, res) => {
@@ -1601,11 +1642,17 @@ Platform Administration • LMS by Umar`;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').substring(0, 16);
 
-    const targetCompany = companies.find(c => c.id === companyId) || companies[0];
+    let targetCompanyId = companyId;
+    if (req.userRole !== 'Owner') {
+      // Force companyId scope to current user's companyId for standard admins
+      targetCompanyId = req.companyId || 'comp-001';
+    }
+
+    const targetCompany = companies.find(c => c.id === targetCompanyId) || companies[0];
 
     const newInv: RoleInvitation = {
       id: `inv-${Date.now()}`,
-      companyId: companyId || targetCompany?.id || 'comp-001',
+      companyId: targetCompanyId || targetCompany?.id || 'comp-001',
       email: normalizedEmail,
       role,
       token,
@@ -1618,7 +1665,7 @@ Platform Administration • LMS by Umar`;
     roleInvitations.push(newInv);
 
     const baseUrl = getAppBaseUrl(req);
-    const inviteUrl = `${baseUrl}/register?token=${token}&company=${companyId || targetCompany?.id || 'comp-001'}`;
+    const inviteUrl = `${baseUrl}/register?token=${token}&company=${targetCompanyId || targetCompany?.id || 'comp-001'}`;
 
     const emailSent = await sendClientInvitationEmail({
       companyName: targetCompany?.name || 'LMS Enterprise Workspace',
@@ -1666,6 +1713,12 @@ System Administration • LMS by Umar`;
     const { id } = req.params;
     const inv = roleInvitations.find(i => i.id === id);
     if (!inv) return res.status(404).json({ error: 'Invitation not found.' });
+
+    // Strict multi-tenant isolation guard
+    if (req.userRole !== 'Owner' && (inv.companyId || 'comp-001') !== req.companyId) {
+      return res.status(403).json({ error: 'Access Denied: Invitation does not belong to this organization.' });
+    }
+
     inv.status = 'Revoked';
     res.json({ success: true, message: `Invitation for ${inv.email} has been revoked.` });
   });
@@ -2370,6 +2423,12 @@ System Administration • LMS by Umar`;
 
     // Strict Tenant Isolation: filter by tenant companyId
     if (req.userRole !== 'Owner') {
+      if (userId) {
+        const targetUser = users.find(u => u.id === userId);
+        if (targetUser && (targetUser.companyId || 'comp-001') !== req.companyId) {
+          return res.status(403).json({ error: 'Access Denied: Labor record does not belong to this organization.' });
+        }
+      }
       const companyUserIds = new Set(users.filter(u => (u.companyId || 'comp-001') === req.companyId).map(u => u.id));
       filtered = filtered.filter(a => (a.companyId && a.companyId === req.companyId) || companyUserIds.has(a.userId));
     }

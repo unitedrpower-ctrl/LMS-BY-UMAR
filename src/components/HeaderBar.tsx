@@ -224,42 +224,45 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                   <div className="text-[11px] text-slate-400">{currentUser.email} • {currentUser.siteName || 'HQ'}</div>
                 </div>
 
-                {/* Role Switcher */}
-                <div className="p-4 bg-slate-800/40 border border-slate-700/60 rounded-2xl space-y-2">
-                  <label className="text-[11px] font-extrabold text-slate-300 uppercase tracking-wider block">
-                    Switch User Role & Identity
-                  </label>
-                  <select
-                    id="slide-menu-role-select"
-                    value={currentUser.id}
-                    onChange={(e) => {
-                      onSelectUser(e.target.value);
-                      setIsHeaderMenuOpen(false);
-                    }}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
-                  >
-                    <optgroup label="Super Admin">
-                      {allUsers.filter(u => u.role === 'Super Admin').map(u => (
-                        <option key={u.id} value={u.id}>🛡️ {u.name} (Super Admin)</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="HR Admin">
-                      {allUsers.filter(u => u.role === 'HR Admin').map(u => (
-                        <option key={u.id} value={u.id}>👔 {u.name} (HR Admin)</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Site Supervisor">
-                      {allUsers.filter(u => u.role === 'Site Supervisor').map(u => (
-                        <option key={u.id} value={u.id}>🏗️ {u.name} (Supervisor)</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Laborers">
-                      {allUsers.filter(u => u.role === 'Labor').map(u => (
-                        <option key={u.id} value={u.id}>👷 {u.name} (Laborer)</option>
-                      ))}
-                    </optgroup>
-                  </select>
-                </div>
+                {/* Role Switcher - STRICTLY restricted to Master Owner / Platform Super Admin */}
+                {(currentUser.role === 'Owner' || 
+                  ['umarchoudhary259@gmail.com', 'umarchaudhary259@gmail.com', 'unitedrpower@gmail.com'].includes(currentUser.email?.toLowerCase())) && (
+                  <div className="p-4 bg-slate-800/40 border border-slate-700/60 rounded-2xl space-y-2">
+                    <label className="text-[11px] font-extrabold text-slate-300 uppercase tracking-wider block">
+                      Switch User Role & Identity
+                    </label>
+                    <select
+                      id="slide-menu-role-select"
+                      value={currentUser.id}
+                      onChange={(e) => {
+                        onSelectUser(e.target.value);
+                        setIsHeaderMenuOpen(false);
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                    >
+                      <optgroup label="Super Admin">
+                        {allUsers.filter(u => u.role === 'Super Admin').map(u => (
+                          <option key={u.id} value={u.id}>🛡️ {u.name} (Super Admin)</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="HR Admin">
+                        {allUsers.filter(u => u.role === 'HR Admin').map(u => (
+                          <option key={u.id} value={u.id}>👔 {u.name} (HR Admin)</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Site Supervisor">
+                        {allUsers.filter(u => u.role === 'Site Supervisor').map(u => (
+                          <option key={u.id} value={u.id}>🏗️ {u.name} (Supervisor)</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Laborers">
+                        {allUsers.filter(u => u.role === 'Labor').map(u => (
+                          <option key={u.id} value={u.id}>👷 {u.name} (Laborer)</option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
+                )}
 
                 {/* Language Selector */}
                 {onChangeLang && (
