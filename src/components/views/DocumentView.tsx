@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { DocumentItem, User } from '../../types';
 import { LanguageCode, getTranslation } from '../../lib/i18n';
+import { uploadDocumentVaultApi } from '../../lib/api';
 import { 
   FileText, 
   Upload, 
@@ -19,7 +20,9 @@ import {
   Clock, 
   CheckCircle2, 
   AlertCircle,
-  FolderLock
+  FolderLock,
+  Loader2,
+  Cloud
 } from 'lucide-react';
 
 interface DocumentViewProps {
@@ -51,6 +54,8 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
   const [targetAudience, setTargetAudience] = useState<DocumentItem['targetAudience']>('All Staff');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string>('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
   const isAdmin = currentUser.role === 'Owner' || currentUser.role === 'Super Admin' || currentUser.role === 'HR Admin' || currentUser.role === 'Site Supervisor';
 
@@ -104,47 +109,63 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
     }
   };
 
-  // Submit Upload Form
-  const handleFormSubmit = (e: React.FormEvent) => {
+  // Submit Upload Form with Cloudinary integration
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !description.trim()) return;
 
-    let fileType: DocumentItem['fileType'] = 'PDF';
-    let fileSize = '1.4 MB';
-    let fileName = `${title.toLowerCase().replace(/\s+/g, '_')}.pdf`;
+    setIsUploading(true);
+    setUploadError('');
 
-    if (selectedFile) {
-      fileName = selectedFile.name;
-      fileSize = `${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB`;
-      if (selectedFile.type.includes('pdf')) fileType = 'PDF';
-      else if (selectedFile.type.includes('word') || selectedFile.name.endsWith('.doc') || selectedFile.name.endsWith('.docx')) fileType = 'Word';
-      else if (selectedFile.type.includes('sheet') || selectedFile.name.endsWith('.xls') || selectedFile.name.endsWith('.xlsx')) fileType = 'Excel';
-      else if (selectedFile.type.includes('image')) fileType = 'Image';
-      else fileType = 'Other';
+    try {
+      let fileType: DocumentItem['fileType'] = 'PDF';
+      let fileSize = '1.4 MB';
+      let fileName = `${title.toLowerCase().replace(/\s+/g, '_')}.pdf`;
+      let fileUrl = uploadedFileUrl || 'data:text/plain;charset=utf-8,LMS%20by%20Umar%20Official%20Document';
+
+      if (selectedFile) {
+        fileName = selectedFile.name;
+        fileSize = `${(selectedFile.size / (1024 * 1024)).toFixed(2)} MB`;
+        if (selectedFile.type.includes('pdf')) fileType = 'PDF';
+        else if (selectedFile.type.includes('word') || selectedFile.name.endsWith('.doc') || selectedFile.name.endsWith('.docx')) fileType = 'Word';
+        else if (selectedFile.type.includes('sheet') || selectedFile.name.endsWith('.xls') || selectedFile.name.endsWith('.xlsx')) fileType = 'Excel';
+        else if (selectedFile.type.includes('image')) fileType = 'Image';
+        else fileType = 'Other';
+
+        // Upload to Cloudinary folder lms_document_vault
+        const uploadRes = await uploadDocumentVaultApi(selectedFile, currentUser);
+        if (uploadRes && uploadRes.secure_url) {
+          fileUrl = uploadRes.secure_url;
+        }
+      }
+
+      const newDoc: DocumentItem = {
+        id: `doc-${Date.now()}`,
+        title: title.trim(),
+        description: description.trim(),
+        fileName,
+        fileType,
+        fileSize,
+        fileUrl,
+        category,
+        targetAudience,
+        uploadedBy: `${currentUser.name} (${currentUser.role})`,
+        uploadedAt: new Date().toISOString().split('T')[0]
+      };
+
+      onUploadDocument(newDoc);
+      setIsUploadModalOpen(false);
+
+      // Reset
+      setTitle('');
+      setDescription('');
+      setSelectedFile(null);
+      setUploadedFileUrl('');
+    } catch (err: any) {
+      setUploadError(err.message || 'Failed to upload document to Cloudinary storage.');
+    } finally {
+      setIsUploading(false);
     }
-
-    const newDoc: DocumentItem = {
-      id: `doc-${Date.now()}`,
-      title: title.trim(),
-      description: description.trim(),
-      fileName,
-      fileType,
-      fileSize,
-      fileUrl: uploadedFileUrl || 'data:text/plain;charset=utf-8,LMS%20by%20Umar%20Official%20Document',
-      category,
-      targetAudience,
-      uploadedBy: `${currentUser.name} (${currentUser.role})`,
-      uploadedAt: new Date().toISOString().split('T')[0]
-    };
-
-    onUploadDocument(newDoc);
-    setIsUploadModalOpen(false);
-
-    // Reset
-    setTitle('');
-    setDescription('');
-    setSelectedFile(null);
-    setUploadedFileUrl('');
   };
 
   // Real Trigger Browser Download

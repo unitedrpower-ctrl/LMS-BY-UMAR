@@ -67,14 +67,17 @@ export interface User {
   // Labor Registration & Credentials & Bank Account
   iqamaId?: string;
   iqamaExpiry?: string; // YYYY-MM-DD
-  sponsorName?: string; // Kafeel / Third-party Agency Name
+  iqamaDocUrl?: string; // Cloudinary CDN URL for Iqama PDF/Scan
   passportNumber?: string;
+  passportDocUrl?: string; // Cloudinary CDN URL for Passport PDF/Scan
+  contractDocUrl?: string; // Cloudinary CDN URL for Employment Contract
+  sponsorName?: string; // Kafeel / Third-party Agency Name
   loginSerial?: string;
   loginPassword?: string;
   bankName?: string;
   accountNumber?: string;
   iban?: string;
-  status?: 'Active' | 'Inactive' | 'Pending' | 'Rejected';
+  status?: 'Active' | 'Inactive' | 'Pending' | 'Rejected' | 'Suspended';
   registeredAt?: string;
   isGoogleUser?: boolean;
   profileCompleted?: boolean;
@@ -184,6 +187,7 @@ export interface DocumentItem {
   uploadedBy: string; // Name/ID of Admin
   uploadedAt: string; // ISO string or date
   targetAudience?: 'All Staff' | 'Supervisors Only' | 'Workers & Laborers';
+  workerId?: string;
 }
 
 export interface SQLQueryExample {

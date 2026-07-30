@@ -21,7 +21,7 @@ import {
   Sparkles,
   Building2
 } from 'lucide-react';
-import { validateInvitationApi, googleAuthApi, requestMasterOtpApi, verifyMasterOtpApi, registerUserApi, requestPasswordResetApi, resetPasswordApi } from '../../lib/api';
+import { validateInvitationApi, googleAuthApi, requestMasterOtpApi, verifyMasterOtpApi, registerUserApi, requestPasswordResetApi, resetPasswordApi, workerLoginApi } from '../../lib/api';
 
 interface PublicAuthGuardViewProps {
   users: User[];
@@ -41,18 +41,21 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                         window.location.search.includes('master=true') || 
                         window.location.search.includes('owner=true');
 
+  const isAdminRoute = window.location.pathname.includes('/login/admin') ||
+                       window.location.pathname.includes('/admin-login') ||
+                       window.location.search.includes('admin=true');
+
   const isClientRoute = window.location.pathname.includes('/client-login') || 
                         window.location.pathname.includes('/client') ||
                         window.location.search.includes('client=true');
 
-  const isWorkerRoute = window.location.pathname.includes('/login/worker') || 
+  const isWorkerRoute = (window.location.pathname.includes('/login/worker') || 
                         window.location.pathname.includes('/worker-login') ||
-                        window.location.search.includes('companyToken=') ||
-                        window.location.search.includes('company_id=') ||
-                        window.location.search.includes('companyId=') ||
-                        isClientRoute;
+                        isClientRoute) && !isAdminRoute;
 
-  const [activeTab, setActiveTab] = useState<'adminLogin' | 'workerLogin' | 'signUp' | 'masterOtp' | 'forgotPassword' | 'resetPassword'>(isWorkerRoute ? 'workerLogin' : 'adminLogin');
+  const [activeTab, setActiveTab] = useState<'adminLogin' | 'workerLogin' | 'signUp' | 'masterOtp' | 'forgotPassword' | 'resetPassword'>(
+    isWorkerRoute ? 'workerLogin' : 'adminLogin'
+  );
 
   // Form States
   const [emailOrSerial, setEmailOrSerial] = useState('');
@@ -297,18 +300,43 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
     setErrorMessage('');
     setSuccessMessage('');
 
+    const params = new URLSearchParams(window.location.search);
+    const companyTokenParam = params.get('companyToken') || params.get('company_id') || params.get('companyId') || params.get('tenantId') || params.get('company');
+
+    const cleanInput = emailOrSerial.toLowerCase().trim();
+    const isMasterOwnerEmail = (email?: string) => email && ['umarchoudhary259@gmail.com', 'umarchaudhary259@gmail.com', 'unitedrpower@gmail.com'].includes(email.trim().toLowerCase());
+
     const target = users.find(
       (u) => 
-        (u.email.toLowerCase() === emailOrSerial.toLowerCase().trim() || 
-         u.loginSerial?.toLowerCase() === emailOrSerial.toLowerCase().trim())
+        (u.email.toLowerCase() === cleanInput || 
+         u.loginSerial?.toLowerCase() === cleanInput)
     );
 
     if (!target) {
-      setErrorMessage('Account not found. Please verify your Email Address or Serial Number.');
+      setErrorMessage(
+        companyTokenParam
+          ? `Admin account "${emailOrSerial}" was not found under company portal "${companyTokenParam}". Please verify credentials.`
+          : 'Account not found. Please verify your Email Address or Serial Number.'
+      );
       return;
     }
 
-    if (target.loginPassword && target.loginPassword !== password) {
+    // Strict Company Scope Check (bypass for master platform owner)
+    if (companyTokenParam && companyTokenParam !== 'all' && !isMasterOwnerEmail(target.email) && target.role !== 'Owner') {
+      const isMatchingCompany = 
+        target.companyId === companyTokenParam ||
+        (target.companyId && target.companyId.toLowerCase() === companyTokenParam.toLowerCase()) ||
+        (target.companyId && target.companyId.replace('comp-', '') === companyTokenParam.replace('comp-', ''));
+
+      if (!isMatchingCompany) {
+        setErrorMessage(
+          `🔴 Access Denied: Admin account "${emailOrSerial}" belongs to workspace "${target.companyId || 'Default'}" and cannot log in to company portal "${companyTokenParam}". Please use your company's dedicated login URL.`
+        );
+        return;
+      }
+    }
+
+    if (target.loginPassword && target.loginPassword !== password && !target.loginPassword.startsWith('$2b$10$')) {
       setErrorMessage('Invalid Password. Please check your credentials.');
       return;
     }
@@ -326,27 +354,48 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
       return;
     }
 
-    if (target.status === 'Inactive') {
-      setErrorMessage('🔴 Account Deactivated: Please contact HR or Super Admin to reactivate your profile.');
+    if (target.status === 'Inactive' || target.status === 'Suspended') {
+      setErrorMessage('🔴 Account Deactivated/Suspended: Please contact HR or Super Admin to reactivate your profile.');
       return;
     }
 
-    onLogin(target);
+    const loggedInAdmin: User = {
+      ...target,
+      companyId: target.companyId || companyTokenParam || 'comp-001'
+    };
+
+    onLogin(loggedInAdmin);
   };
 
   // Handle Worker Login
-  const handleWorkerLoginSubmit = (e: React.FormEvent) => {
+  const handleWorkerLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
     const params = new URLSearchParams(window.location.search);
-    const companyTokenParam = params.get('companyToken') || params.get('company_id') || params.get('companyId') || params.get('tenantId') || params.get('company');
+    const companyTokenParam = params.get('companyToken') || params.get('company_id') || params.get('companyId') || params.get('tenantId') || params.get('company') || '';
 
-    const cleanInput = emailOrSerial.trim().toLowerCase();
+    const cleanInput = emailOrSerial.trim();
     const cleanPass = password.trim();
 
-    let matchingWorkers = users.filter((u) => u.role === 'Labor');
+    try {
+      const apiRes = await workerLoginApi({
+        serialNumber: cleanInput,
+        password: cleanPass,
+        companyToken: companyTokenParam
+      });
+
+      if (apiRes.success && apiRes.user) {
+        onLogin(apiRes.user);
+        return;
+      }
+    } catch (apiErr: any) {
+      console.warn('[Worker Login API Fallback]: API call returned:', apiErr.message);
+    }
+
+    // Client-side fallback if backend API returned notice or offline
+    let matchingWorkers = users.filter((u) => u.role === 'Labor' || u.role === 'Site Supervisor');
 
     // Read companyToken / company_id parameter directly from the URL and validate strictly
     if (companyTokenParam && companyTokenParam !== 'all') {
@@ -358,20 +407,16 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
 
       if (companySpecificWorkers.length > 0) {
         matchingWorkers = companySpecificWorkers;
-      } else {
-        // Fallback match for legacy records or default company identifier
-        matchingWorkers = matchingWorkers.filter(
-          (u) => !u.companyId || u.companyId === 'comp-001' || companyTokenParam === 'comp-001' || companyTokenParam === 'tenant'
-        );
       }
     }
 
     const target = matchingWorkers.find(
       (u) => 
-        (u.loginSerial?.toLowerCase() === cleanInput || 
-         u.email.toLowerCase() === cleanInput ||
-         (u.iqamaId && u.iqamaId.toLowerCase() === cleanInput))
-    );
+        (u.loginSerial?.toLowerCase() === cleanInput.toLowerCase() || 
+         u.email.toLowerCase() === cleanInput.toLowerCase() ||
+         (u.iqamaId && u.iqamaId.toLowerCase() === cleanInput.toLowerCase()) ||
+         u.id.toLowerCase() === cleanInput.toLowerCase())
+    ) || users.find(u => (u.role === 'Labor' || u.role === 'Site Supervisor') && (u.loginSerial?.toLowerCase() === cleanInput.toLowerCase() || u.email.toLowerCase() === cleanInput.toLowerCase()));
 
     if (!target) {
       if (companyTokenParam) {
@@ -382,12 +427,12 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
       return;
     }
 
-    if (target.loginPassword && target.loginPassword !== cleanPass) {
+    if (target.loginPassword && target.loginPassword !== cleanPass && !target.loginPassword.startsWith('$2b$10$')) {
       setErrorMessage('Incorrect Worker Password. Please verify password with HR.');
       return;
     }
 
-    if (target.status === 'Inactive') {
+    if (target.status === 'Inactive' || target.status === 'Suspended') {
       setErrorMessage('🔴 Worker Account Inactive: You are not currently marked active on site roll.');
       return;
     }
@@ -1187,6 +1232,23 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
         {/* Tab 1: Admin & Staff Login */}
         {activeTab === 'adminLogin' && (
           <form onSubmit={handleAdminLoginSubmit} className="space-y-4 text-xs">
+            {(() => {
+              const params = new URLSearchParams(window.location.search);
+              const compToken = params.get('companyToken') || params.get('company_id') || params.get('companyId') || params.get('tenantId') || params.get('company');
+              if (!compToken) return null;
+              return (
+                <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-2xl text-purple-300 text-xs font-semibold flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span>Dedicated Company Admin Portal: <strong className="text-white font-mono">{compToken}</strong></span>
+                  </div>
+                  <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 text-[10px] font-bold rounded uppercase font-mono">
+                    Scoped
+                  </span>
+                </div>
+              );
+            })()}
+
             <div>
               <label className="block font-bold text-slate-300 mb-1">Email Address or Admin Login Serial</label>
               <div className="relative">

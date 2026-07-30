@@ -31,7 +31,9 @@ import {
   downloadLaborCredentialsExcelApi, 
   getInvitationsApi, 
   createInvitationApi, 
-  revokeInvitationApi 
+  revokeInvitationApi,
+  uploadWorkerPhotoApi,
+  uploadDocumentVaultApi
 } from '../../lib/api';
 
 interface UsersViewProps {
@@ -75,6 +77,9 @@ export const UsersView: React.FC<UsersViewProps> = ({
   const [isInviting, setIsInviting] = useState(false);
   const [inviteError, setInviteError] = useState('');
   const [inviteSuccess, setInviteSuccess] = useState('');
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isUploadingIqama, setIsUploadingIqama] = useState(false);
+  const [isUploadingPassport, setIsUploadingPassport] = useState(false);
   const [createdInvitationModal, setCreatedInvitationModal] = useState<{
     invitation: RoleInvitation;
     emailBody: string;
@@ -701,6 +706,39 @@ export const UsersView: React.FC<UsersViewProps> = ({
                     onChange={(e) => setEditingUser({ ...editingUser, iqamaId: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl"
                   />
+                  {/* Cloudinary Iqama PDF Attachment */}
+                  <div className="mt-1 flex items-center justify-between text-[11px]">
+                    <label className="text-indigo-600 font-bold cursor-pointer hover:underline flex items-center gap-1 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
+                      <Upload className="w-3 h-3" /> {isUploadingIqama ? 'Uploading Cloudinary PDF...' : 'Attach Iqama PDF'}
+                      <input
+                        type="file"
+                        accept="application/pdf,image/*"
+                        className="hidden"
+                        disabled={isUploadingIqama}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setIsUploadingIqama(true);
+                            try {
+                              const res = await uploadDocumentVaultApi(file);
+                              if (res && res.secure_url) {
+                                setEditingUser(prev => ({ ...prev, iqamaDocUrl: res.secure_url }));
+                              }
+                            } catch (err: any) {
+                              alert(err.message || 'Failed to upload Iqama PDF to Cloudinary');
+                            } finally {
+                              setIsUploadingIqama(false);
+                            }
+                          }
+                        }}
+                      />
+                    </label>
+                    {editingUser.iqamaDocUrl && (
+                      <a href={editingUser.iqamaDocUrl} target="_blank" rel="noreferrer" className="text-emerald-600 font-extrabold flex items-center gap-1 hover:underline">
+                        <ExternalLink className="w-3 h-3" /> View Iqama PDF
+                      </a>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -735,6 +773,39 @@ export const UsersView: React.FC<UsersViewProps> = ({
                     onChange={(e) => setEditingUser({ ...editingUser, passportNumber: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl"
                   />
+                  {/* Cloudinary Passport Scan Attachment */}
+                  <div className="mt-1 flex items-center justify-between text-[11px]">
+                    <label className="text-indigo-600 font-bold cursor-pointer hover:underline flex items-center gap-1 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
+                      <Upload className="w-3 h-3" /> {isUploadingPassport ? 'Uploading Cloudinary PDF...' : 'Attach Passport Scan'}
+                      <input
+                        type="file"
+                        accept="application/pdf,image/*"
+                        className="hidden"
+                        disabled={isUploadingPassport}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setIsUploadingPassport(true);
+                            try {
+                              const res = await uploadDocumentVaultApi(file);
+                              if (res && res.secure_url) {
+                                setEditingUser(prev => ({ ...prev, passportDocUrl: res.secure_url }));
+                              }
+                            } catch (err: any) {
+                              alert(err.message || 'Failed to upload Passport document to Cloudinary');
+                            } finally {
+                              setIsUploadingPassport(false);
+                            }
+                          }
+                        }}
+                      />
+                    </label>
+                    {editingUser.passportDocUrl && (
+                      <a href={editingUser.passportDocUrl} target="_blank" rel="noreferrer" className="text-emerald-600 font-extrabold flex items-center gap-1 hover:underline">
+                        <ExternalLink className="w-3 h-3" /> View Passport
+                      </a>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -830,21 +901,33 @@ export const UsersView: React.FC<UsersViewProps> = ({
                   <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
                     <span>Worker Photo / Avatar</span>
                     <label className="text-[10px] text-indigo-600 font-extrabold cursor-pointer hover:underline flex items-center gap-1 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-200">
-                      <Upload className="w-3 h-3" /> Upload from Device
+                      <Upload className="w-3 h-3" /> {isUploadingPhoto ? 'Uploading Cloudinary Photo...' : 'Upload Photo'}
                       <input
                         type="file"
                         accept="image/*"
                         className="hidden"
-                        onChange={(e) => {
+                        disabled={isUploadingPhoto}
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              if (typeof reader.result === 'string') {
-                                setEditingUser({ ...editingUser, avatar: reader.result });
+                            setIsUploadingPhoto(true);
+                            try {
+                              const res = await uploadWorkerPhotoApi(file);
+                              if (res && res.secure_url) {
+                                setEditingUser(prev => ({ ...prev, avatar: res.secure_url }));
                               }
-                            };
-                            reader.readAsDataURL(file);
+                            } catch (err: any) {
+                              // Fallback to local data URL if Cloudinary credentials missing in dev
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                if (typeof reader.result === 'string') {
+                                  setEditingUser(prev => ({ ...prev, avatar: reader.result as string }));
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            } finally {
+                              setIsUploadingPhoto(false);
+                            }
                           }
                         }}
                       />
@@ -852,7 +935,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
                   </label>
                   <input
                     type="text"
-                    placeholder="https://... or upload from device"
+                    placeholder="https://res.cloudinary.com/... or upload photo"
                     value={editingUser.avatar || ''}
                     onChange={(e) => setEditingUser({ ...editingUser, avatar: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl"

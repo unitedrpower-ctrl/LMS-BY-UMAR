@@ -1,4 +1,4 @@
-import { User, Site, Attendance, Payroll, Complaint, Notice, RoleInvitation, UserRole, Company, SubscriptionPlanType } from '../types';
+import { User, Site, Attendance, Payroll, Complaint, Notice, RoleInvitation, UserRole, Company, SubscriptionPlanType, DocumentItem } from '../types';
 
 /**
  * API Service Layer for Express Backend Routes (/api/*)
@@ -314,6 +314,22 @@ export async function googleAuthApi(data: {
   });
 }
 
+export async function workerLoginApi(data: {
+  serialNumber: string;
+  password?: string;
+  companyToken?: string;
+  companyId?: string;
+}): Promise<{
+  success: boolean;
+  user: User;
+  message: string;
+}> {
+  return fetchApi('/api/auth/worker-login', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+}
+
 // 11. Multi-Tenant SaaS & Platform Owner APIs
 export async function getMyCompanyApi(currentUser?: User): Promise<{
   company: Company;
@@ -493,6 +509,88 @@ export async function resetPasswordApi(token: string, newPassword: string): Prom
     method: 'POST',
     body: JSON.stringify({ token, newPassword })
   });
+}
+
+// ---------------------------------------------------------
+// CLOUDINARY FILE STORAGE & DOCUMENT VAULT APIS
+// ---------------------------------------------------------
+export async function uploadWorkerPhotoApi(file: File, currentUser?: User): Promise<{
+  success: boolean;
+  url: string;
+  secure_url: string;
+  folder: string;
+}> {
+  const formData = new FormData();
+  formData.append('photo', file);
+
+  const headers: Record<string, string> = {};
+  if (currentUser) {
+    headers['x-user-id'] = currentUser.id;
+    headers['x-user-role'] = currentUser.role;
+    if (currentUser.companyId) headers['x-company-id'] = currentUser.companyId;
+  }
+
+  const response = await fetch('/api/upload/worker-photo', {
+    method: 'POST',
+    headers,
+    body: formData
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || err.error || 'Failed to upload worker photo to Cloudinary.');
+  }
+
+  return response.json();
+}
+
+export async function uploadDocumentVaultApi(file: File, currentUser?: User): Promise<{
+  success: boolean;
+  url: string;
+  secure_url: string;
+  fileName: string;
+  fileSize: string;
+  folder: string;
+}> {
+  const formData = new FormData();
+  formData.append('document', file);
+
+  const headers: Record<string, string> = {};
+  if (currentUser) {
+    headers['x-user-id'] = currentUser.id;
+    headers['x-user-role'] = currentUser.role;
+    if (currentUser.companyId) headers['x-company-id'] = currentUser.companyId;
+  }
+
+  const response = await fetch('/api/upload/document', {
+    method: 'POST',
+    headers,
+    body: formData
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || err.error || 'Failed to upload document file to Cloudinary.');
+  }
+
+  return response.json();
+}
+
+export async function getDocumentsApi(currentUser?: User): Promise<DocumentItem[]> {
+  return fetchApi<DocumentItem[]>('/api/documents', {}, currentUser);
+}
+
+export async function saveDocumentApi(doc: Partial<DocumentItem>, currentUser?: User): Promise<DocumentItem> {
+  return fetchApi<DocumentItem>('/api/documents', {
+    method: 'POST',
+    body: JSON.stringify(doc)
+  }, currentUser);
+}
+
+export async function deleteDocumentApi(docId: string, currentUser?: User): Promise<{ success: boolean }> {
+  return fetchApi<{ success: boolean }>(`/api/documents/${docId}`, {
+    method: 'DELETE'
+  }, currentUser);
 }
 
 

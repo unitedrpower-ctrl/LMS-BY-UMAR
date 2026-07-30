@@ -40,7 +40,10 @@ import {
   getComplaintsApi, 
   getNoticesApi, 
   registerUserApi,
-  getMyCompanyApi
+  getMyCompanyApi,
+  getDocumentsApi,
+  saveDocumentApi,
+  deleteDocumentApi
 } from './lib/api';
 
 export default function App() {
@@ -119,14 +122,16 @@ export default function App() {
           backendAttendance,
           backendPayrolls,
           backendComplaints,
-          backendNotices
+          backendNotices,
+          backendDocuments
         ] = await Promise.all([
           getUsersApi(uContext),
           getSitesApi(uContext),
           getAttendanceApi(uContext),
           getPayrollApi(uContext),
           getComplaintsApi(uContext),
-          getNoticesApi(uContext)
+          getNoticesApi(uContext),
+          getDocumentsApi(uContext)
         ]);
 
         if (backendUsers) setUsers(backendUsers);
@@ -135,6 +140,7 @@ export default function App() {
         if (backendPayrolls) setPayrolls(backendPayrolls);
         if (backendComplaints) setComplaints(backendComplaints);
         if (backendNotices) setNotices(backendNotices);
+        if (backendDocuments) setDocuments(backendDocuments);
 
         if (uContext) {
           try {
@@ -256,13 +262,26 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    const params = new URLSearchParams(window.location.search);
+    const existingCompToken = currentUser?.companyId || params.get('companyToken') || params.get('company_id') || params.get('companyId') || params.get('tenantId') || params.get('company');
+    const isWorkerSession = currentUser?.role === 'Labor' || window.location.pathname.includes('/login/worker');
+
     setCurrentUserId(null);
     saveToStorage(STORAGE_KEYS.CURRENT_USER_ID, null);
     localStorage.removeItem('lms_current_user_id');
     localStorage.removeItem('lms_user_role');
     localStorage.removeItem('lms_user_email');
     localStorage.removeItem('lms_auth_token');
+    localStorage.removeItem('labor_admin_current_user_id_v1');
+    sessionStorage.clear();
     setIsAuthModalOpen(false);
+
+    if (existingCompToken && existingCompToken !== 'comp-owner' && existingCompToken !== 'all') {
+      const routePrefix = isWorkerSession ? '/login/worker' : '/login/admin';
+      window.history.replaceState({}, '', `${routePrefix}?companyToken=${existingCompToken}`);
+    } else {
+      window.history.replaceState({}, '', '/');
+    }
   };
 
   const handleSignUp = async (newUser: User) => {
@@ -400,13 +419,23 @@ export default function App() {
     setNotices((prev) => [notice, ...prev]);
   };
 
-  const handleUploadDocument = (doc: DocumentItem) => {
+  const handleUploadDocument = async (doc: DocumentItem) => {
     setDocuments((prev) => [doc, ...prev]);
+    try {
+      await saveDocumentApi(doc, currentUser || undefined);
+    } catch (err: any) {
+      console.warn("Backend API save document warning:", err.message);
+    }
   };
 
-  const handleDeleteDocument = (docId: string) => {
+  const handleDeleteDocument = async (docId: string) => {
     if (window.confirm('Are you sure you want to delete this document from the vault?')) {
       setDocuments((prev) => prev.filter((d) => d.id !== docId));
+      try {
+        await deleteDocumentApi(docId, currentUser || undefined);
+      } catch (err: any) {
+        console.warn("Backend API delete document warning:", err.message);
+      }
     }
   };
 
