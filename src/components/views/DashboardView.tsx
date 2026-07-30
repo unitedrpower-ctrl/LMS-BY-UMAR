@@ -94,9 +94,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => {
-                const workerLink = `${window.location.origin}/`;
+                const workerLink = `${window.location.origin}/login/worker?companyToken=${currentUser.companyId || 'tenant'}`;
                 navigator.clipboard.writeText(workerLink);
-                alert(`📋 Worker Login Link Copied to Clipboard!\n\nShare this link with your workforce:\n${workerLink}\n\nWorkers can log in directly using their assigned Login Serial Number and Access Password.`);
+                alert(`📋 Dedicated Company Worker Login Link Copied!\n\nShare this unique link with your site workforce:\n${workerLink}\n\nWorkers clicking this link will automatically enter your dedicated company portal to log in with their assigned Serial Number and Password.`);
               }}
               className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
             >

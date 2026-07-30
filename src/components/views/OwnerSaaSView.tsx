@@ -25,7 +25,8 @@ import {
   FileText,
   X,
   ChevronRight,
-  Filter
+  Filter,
+  HardHat
 } from 'lucide-react';
 import { 
   getOwnerCompaniesApi, 
@@ -140,6 +141,26 @@ export const OwnerSaaSView: React.FC<OwnerSaaSViewProps> = ({ currentUser }) => 
     }
   };
 
+  // Helper to completely reset onboarding form fields to blank values
+  const resetOnboardForm = () => {
+    setNewCompName('');
+    setNewCompCr('');
+    setNewCompAdminName('');
+    setNewCompAdminEmail('');
+    setNewCompInitialPassword('');
+    setNewCompPhone('');
+    setNewCompPlan('1_YEAR');
+    setNewCompCapacity('100');
+    setNewCompPrice('12000');
+  };
+
+  const resetDemoForm = () => {
+    setDemoClientName('');
+    setDemoClientEmail('');
+    setDemoClientPhone('');
+    setDemoMaxLaborers('25');
+  };
+
   const handleOnboardSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCompName.trim() || !newCompAdminEmail.trim()) {
@@ -168,6 +189,9 @@ export const OwnerSaaSView: React.FC<OwnerSaaSViewProps> = ({ currentUser }) => 
         emailBody: res.emailBody,
         inviteUrl: res.inviteUrl
       });
+
+      // STRICT RESET: Reset all form fields to completely blank values immediately after creation
+      resetOnboardForm();
 
       setStatusMsg({ type: 'success', text: `🎉 Company "${res.company.name}" successfully onboarded! Super Admin invitation link created.` });
       await loadData();
@@ -305,6 +329,7 @@ export const OwnerSaaSView: React.FC<OwnerSaaSViewProps> = ({ currentUser }) => 
             <button
               onClick={() => {
                 setOnboardResult(null);
+                resetOnboardForm();
                 setShowOnboardModal(true);
               }}
               className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold text-xs rounded-xl shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2 cursor-pointer"
@@ -615,6 +640,18 @@ export const OwnerSaaSView: React.FC<OwnerSaaSViewProps> = ({ currentUser }) => 
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => {
+                              const workerLink = `${window.location.origin}/login/worker?companyToken=${comp.id}`;
+                              navigator.clipboard.writeText(workerLink);
+                              setStatusMsg({ type: 'success', text: `📋 Worker login link for ${comp.name} copied!` });
+                            }}
+                            className="px-2.5 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                            title="Copy Worker Login Link for this company"
+                          >
+                            <HardHat className="w-3 h-3" /> Worker Link
+                          </button>
+
+                          <button
+                            onClick={() => {
                               setExtendComp(comp);
                               setExtendMonths(comp.planType === '6_MONTH' ? 6 : 12);
                               setExtendCapacity(comp.maxLaborersAllowed);
@@ -672,8 +709,12 @@ export const OwnerSaaSView: React.FC<OwnerSaaSViewProps> = ({ currentUser }) => 
               </div>
 
               <button 
-                onClick={() => setShowOnboardModal(false)}
-                className="p-2 text-slate-400 hover:text-white rounded-xl bg-slate-800/50 hover:bg-slate-800"
+                onClick={() => {
+                  setShowOnboardModal(false);
+                  setOnboardResult(null);
+                  resetOnboardForm();
+                }}
+                className="p-2 text-slate-400 hover:text-white rounded-xl bg-slate-800/50 hover:bg-slate-800 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -726,6 +767,7 @@ export const OwnerSaaSView: React.FC<OwnerSaaSViewProps> = ({ currentUser }) => 
                     onClick={() => {
                       setShowOnboardModal(false);
                       setOnboardResult(null);
+                      resetOnboardForm();
                     }}
                     className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-extrabold rounded-xl text-xs cursor-pointer"
                   >

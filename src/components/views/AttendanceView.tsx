@@ -34,6 +34,8 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 }) => {
   const todayStr = new Date().toISOString().split('T')[0];
   const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [selectedMonth, setSelectedMonth] = useState(todayStr.substring(0, 7)); // YYYY-MM
+  const [viewMode, setViewMode] = useState<'daily' | 'matrix'>('matrix');
   
   // Default to supervisor's assigned site or first site
   const defaultSiteId = currentUser.siteId || (sites.length > 0 ? sites[0].id : '');
@@ -42,6 +44,30 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
   // Checkbox selection state for selective printing
   const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
+
+  // Calculate days in selected month
+  const [yearNum, monthNum] = React.useMemo(() => {
+    const parts = selectedMonth.split('-');
+    return [parseInt(parts[0], 10) || 2026, parseInt(parts[1], 10) || 7];
+  }, [selectedMonth]);
+
+  const daysInMonth = React.useMemo(() => {
+    return new Date(yearNum, monthNum, 0).getDate();
+  }, [yearNum, monthNum]);
+
+  const daysArray = React.useMemo(() => {
+    return Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  }, [daysInMonth]);
+
+  const getDayInitial = (day: number) => {
+    const d = new Date(yearNum, monthNum - 1, day);
+    return ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'][d.getDay()];
+  };
+
+  const isFridayDay = (day: number) => {
+    const d = new Date(yearNum, monthNum - 1, day);
+    return d.getDay() === 5;
+  };
 
   // Local draft state for marking roll call (only active workers)
   const activeSite = sites.find((s) => s.id === selectedSiteId);
@@ -301,6 +327,147 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     printWindow.document.close();
   };
 
+  // PRINTING HANDLER FOR FULL MONTHLY ATTENDANCE MATRIX (A4 LANDSCAPE)
+  const handlePrintMonthlyMatrix = (mode: 'all' | 'selected') => {
+    const workersToPrint = mode === 'selected'
+      ? siteLaborers.filter((w) => selectedWorkerIds.includes(w.id))
+      : siteLaborers;
+
+    if (workersToPrint.length === 0) {
+      alert('Please select at least one worker to print.');
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Monthly Attendance Matrix (1-31) - ${selectedMonth}</title>
+          <style>
+            @page { size: A4 landscape; margin: 5mm; }
+            body { font-family: system-ui, -apple-system, sans-serif; padding: 15px; color: #0f172a; line-height: 1.2; font-size: 10px; }
+            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 12px; }
+            .company-title { font-size: 16px; font-weight: 800; color: #0f172a; text-transform: uppercase; }
+            .badge { background: #0f172a; color: white; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }
+            .meta-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 8px; border-radius: 6px; font-size: 10px; margin-bottom: 12px; }
+            table { width: 100%; border-collapse: collapse; font-size: 9px; margin-top: 5px; table-layout: auto; }
+            th, td { border: 1px solid #cbd5e1; text-align: center; padding: 3px 2px; }
+            th { background: #0f172a; color: white; text-transform: uppercase; font-size: 8px; font-weight: bold; }
+            .th-worker { text-align: left; padding-left: 6px; }
+            .td-worker { text-align: left; padding-left: 6px; font-weight: bold; }
+            .is-friday { background: #e0f2fe !important; font-weight: bold; }
+            .st-p { color: #15803d; font-weight: bold; }
+            .st-hd { color: #b45309; font-weight: bold; }
+            .st-a { color: #b91c1c; font-weight: bold; }
+            .st-none { color: #cbd5e1; }
+            .signatures { display: flex; justify-content: space-between; margin-top: 30px; padding-top: 15px; border-top: 1px solid #cbd5e1; font-size: 10px; }
+            @media print {
+              body { padding: 0; }
+              button { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div class="company-title">LMS Labor Management System</div>
+              <div style="font-size: 11px; color: #475569;">Full Monthly 1-31 Days Labor Attendance Matrix Sheet</div>
+            </div>
+            <div>
+              <span class="badge">MONTH: ${selectedMonth} (A4 LANDSCAPE)</span>
+            </div>
+          </div>
+
+          <div class="meta-bar">
+            <div><strong>Construction Site:</strong> ${activeSite?.name || 'All Sites'}</div>
+            <div><strong>Sponsor Agency:</strong> ${selectedSponsor}</div>
+            <div><strong>Total Workforce:</strong> ${workersToPrint.length} Workers</div>
+            <div><strong>Generated Date:</strong> ${todayStr}</div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th class="th-worker" style="width: 60px;">ID</th>
+                <th class="th-worker" style="width: 120px;">Worker Name</th>
+                <th style="width: 70px;">Kafeel / Sponsor</th>
+                ${daysArray.map(d => {
+                  const fri = isFridayDay(d);
+                  return `<th class="${fri ? 'is-friday' : ''}">${d}<br/><span style="font-weight:normal; font-size:7px;">${getDayInitial(d)}</span></th>`;
+                }).join('')}
+                <th style="background:#065f46; width: 25px;">P</th>
+                <th style="background:#92400e; width: 25px;">HD</th>
+                <th style="background:#991b1b; width: 25px;">A</th>
+                <th style="background:#3730a3; width: 35px;">OT</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${workersToPrint.map((lab) => {
+                let pCnt = 0;
+                let hdCnt = 0;
+                let aCnt = 0;
+                let otSum = 0;
+
+                const dayCells = daysArray.map(d => {
+                  const dStr = `${selectedMonth}-${String(d).padStart(2, '0')}`;
+                  const rec = attendanceList.find(a => a.userId === lab.id && a.date === dStr);
+                  const fri = isFridayDay(d);
+
+                  if (rec) {
+                    if (rec.status === 'Present') { pCnt++; }
+                    else if (rec.status === 'Half-Day') { hdCnt++; }
+                    else if (rec.status === 'Absent') { aCnt++; }
+                    if (rec.overtimeHours) { otSum += rec.overtimeHours; }
+                  }
+
+                  let badge = '-';
+                  let cls = 'st-none';
+                  if (rec?.status === 'Present') { badge = 'P'; cls = 'st-p'; }
+                  else if (rec?.status === 'Half-Day') { badge = 'HD'; cls = 'st-hd'; }
+                  else if (rec?.status === 'Absent') { badge = 'A'; cls = 'st-a'; }
+
+                  return `<td class="${fri ? 'is-friday ' : ''}${cls}">${badge}</td>`;
+                }).join('');
+
+                return `
+                  <tr>
+                    <td class="td-worker" style="font-family: monospace;">${lab.loginSerial || lab.id.slice(-6)}</td>
+                    <td class="td-worker">${lab.name}</td>
+                    <td style="font-size:8px;">${lab.sponsorName || 'Direct'}</td>
+                    ${dayCells}
+                    <td style="font-weight:bold; background:#ecfdf5; color:#047857;">${pCnt}</td>
+                    <td style="font-weight:bold; background:#fffbeb; color:#b45309;">${hdCnt}</td>
+                    <td style="font-weight:bold; background:#fef2f2; color:#b91c1c;">${aCnt}</td>
+                    <td style="font-weight:bold; background:#e0e7ff; color:#3730a3;">${otSum ? '+' + otSum : '0'}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+
+          <div class="signatures">
+            <div>
+              <div>____________________________________</div>
+              <div>Marked By: ${currentUser.name} (${currentUser.role})</div>
+            </div>
+            <div>
+              <div>____________________________________</div>
+              <div>Site Manager / HR Stamp & Signature</div>
+            </div>
+          </div>
+
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   // Filter history log for user role
   const displayAttendance = currentUser.role === 'Labor' 
     ? attendanceList.filter((a) => a.userId === currentUser.id)
@@ -430,18 +597,41 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <CalendarCheck className="w-5 h-5 text-indigo-600" />
-            Daily Attendance & Selective Printing Sheet
+            Attendance Management & 1-31 Calendar Matrix
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Log site labor attendance, filter by Kafeel / Sponsor Agency, and print formatted attendance sheets.
+            Log site labor attendance, view full 1-31 day monthly matrix grids, and print formatted A4 Landscape sheets.
           </p>
         </div>
 
-        {saveSuccessMsg && (
-          <div className="px-3 py-1.5 bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-1.5 animate-fade-in">
-            <Check className="w-4 h-4 text-emerald-600" /> Attendance saved successfully!
+        <div className="flex items-center gap-2">
+          {saveSuccessMsg && (
+            <div className="px-3 py-1.5 bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-1.5 animate-fade-in">
+              <Check className="w-4 h-4 text-emerald-600" /> Attendance saved successfully!
+            </div>
+          )}
+          {/* View Mode Toggle */}
+          <div className="bg-slate-200 p-1 rounded-xl flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setViewMode('matrix')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                viewMode === 'matrix' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+              }`}
+            >
+              <CalendarCheck className="w-3.5 h-3.5" /> 1-31 Monthly Matrix
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('daily')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                viewMode === 'daily' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" /> Daily Roll Call
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Control Filters Bar */}
@@ -489,39 +679,67 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           </div>
         </div>
 
-        <div>
-          <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-            Attendance Date
-          </label>
-          <input
-            id="input-attendance-date"
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
+        {viewMode === 'daily' ? (
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+              Attendance Date
+            </label>
+            <input
+              id="input-attendance-date"
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+        ) : (
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+              Select Matrix Month
+            </label>
+            <input
+              id="input-attendance-month"
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+        )}
 
         <div className="flex items-center justify-end gap-2 pt-2 sm:pt-0">
-          <button
-            id="btn-mark-all-present"
-            type="button"
-            onClick={handleMarkAllPresent}
-            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-            Mark All Present
-          </button>
+          {viewMode === 'daily' ? (
+            <>
+              <button
+                id="btn-mark-all-present"
+                type="button"
+                onClick={handleMarkAllPresent}
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                Mark All Present
+              </button>
 
-          <button
-            id="btn-save-attendance-rollcall"
-            type="button"
-            onClick={handleSaveRollCall}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all"
-          >
-            <Save className="w-4 h-4" />
-            Submit Roll Call
-          </button>
+              <button
+                id="btn-save-attendance-rollcall"
+                type="button"
+                onClick={handleSaveRollCall}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all"
+              >
+                <Save className="w-4 h-4" />
+                Submit Roll Call
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handlePrintMonthlyMatrix('all')}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all"
+            >
+              <Printer className="w-4 h-4 text-emerald-200" />
+              Print Matrix (A4 Landscape)
+            </button>
+          )}
         </div>
       </div>
 
@@ -529,198 +747,397 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
       <div className="bg-slate-900 text-white p-3.5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md">
         <div className="flex items-center gap-2 text-xs">
           <Printer className="w-4 h-4 text-amber-400" />
-          <span className="font-bold">Attendance Print Center:</span>
+          <span className="font-bold">Selective Printing Controls:</span>
           <span className="text-slate-300">
             {selectedWorkerIds.length} of {siteLaborers.length} workers checked
           </span>
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => handlePrintAttendance('all')}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-slate-700 transition-all"
-          >
-            <Printer className="w-3.5 h-3.5 text-amber-400" />
-            Print All ({siteLaborers.length})
-          </button>
+          {viewMode === 'daily' ? (
+            <>
+              <button
+                type="button"
+                onClick={() => handlePrintAttendance('all')}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-slate-700 transition-all"
+              >
+                <Printer className="w-3.5 h-3.5 text-amber-400" />
+                Print All ({siteLaborers.length})
+              </button>
 
-          <button
-            type="button"
-            onClick={() => handlePrintAttendance('selected')}
-            disabled={selectedWorkerIds.length === 0}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
-              selectedWorkerIds.length > 0
-                ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-xs'
-                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-            }`}
-          >
-            <Printer className="w-3.5 h-3.5" />
-            Print Selected Workers ({selectedWorkerIds.length})
-          </button>
+              <button
+                type="button"
+                onClick={() => handlePrintAttendance('selected')}
+                disabled={selectedWorkerIds.length === 0}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                  selectedWorkerIds.length > 0
+                    ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-xs'
+                    : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                }`}
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Print Selected ({selectedWorkerIds.length})
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => handlePrintMonthlyMatrix('all')}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-slate-700 transition-all"
+              >
+                <Printer className="w-3.5 h-3.5 text-amber-400" />
+                Print Full Matrix ({siteLaborers.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handlePrintMonthlyMatrix('selected')}
+                disabled={selectedWorkerIds.length === 0}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                  selectedWorkerIds.length > 0
+                    ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-xs'
+                    : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                }`}
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Print Selected Matrix ({selectedWorkerIds.length})
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Roll Call Matrix for Active Site */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-        <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">
-              Roll Call Sheet: {activeSite?.name || 'Site'}
-            </h3>
-            <p className="text-[11px] text-slate-500">
-              {siteLaborers.length} assigned laborers • Date: {selectedDate} • Sponsor Filter: {selectedSponsor}
-            </p>
+      {/* FULL MONTHLY 1-31 MATRIX GRID VIEW OR DAILY ROLL CALL SHEET */}
+      {viewMode === 'matrix' ? (
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden space-y-2">
+          <div className="p-4 bg-slate-900 text-white flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <CalendarCheck className="w-4 h-4 text-indigo-400" />
+                Full 1-31 Monthly Attendance Matrix Grid ({selectedMonth})
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                Click any status cell to cycle (P → HD → A → -) and immediately update work logs.
+              </p>
+            </div>
+
+            <button
+              onClick={toggleSelectAllWorkers}
+              className="px-2.5 py-1 bg-slate-800 border border-slate-700 hover:bg-slate-700 rounded-lg text-xs font-semibold text-slate-200 flex items-center gap-1.5"
+            >
+              {selectedWorkerIds.length === siteLaborers.length ? (
+                <>
+                  <CheckSquare className="w-4 h-4 text-indigo-400" /> Deselect All
+                </>
+              ) : (
+                <>
+                  <Square className="w-4 h-4 text-slate-400" /> Select All for Matrix Print
+                </>
+              )}
+            </button>
           </div>
 
-          <button
-            onClick={toggleSelectAllWorkers}
-            className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg text-xs font-semibold text-slate-700 flex items-center gap-1.5"
-          >
-            {selectedWorkerIds.length === siteLaborers.length ? (
-              <>
-                <CheckSquare className="w-4 h-4 text-indigo-600" /> Deselect All
-              </>
-            ) : (
-              <>
-                <Square className="w-4 h-4 text-slate-400" /> Select All for Printing
-              </>
-            )}
-          </button>
-        </div>
+          <div className="overflow-x-auto p-2">
+            <table className="w-full text-center text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-100 text-slate-700 uppercase font-bold text-[10px]">
+                  <th className="p-2 text-left w-6 border border-slate-200">Sel</th>
+                  <th className="p-2 text-left w-24 border border-slate-200">Worker ID</th>
+                  <th className="p-2 text-left w-40 border border-slate-200">Worker Name</th>
+                  <th className="p-2 text-left w-28 border border-slate-200">Sponsor / Kafeel</th>
+                  {daysArray.map((d) => {
+                    const fri = isFridayDay(d);
+                    return (
+                      <th
+                        key={d}
+                        className={`p-1 border border-slate-200 min-w-[28px] ${
+                          fri ? 'bg-indigo-100 text-indigo-900 font-black' : ''
+                        }`}
+                      >
+                        <div>{d}</div>
+                        <div className="text-[8px] font-normal uppercase text-slate-500">{getDayInitial(d)}</div>
+                      </th>
+                    );
+                  })}
+                  <th className="p-2 bg-emerald-100 text-emerald-900 border border-slate-200 w-10">P</th>
+                  <th className="p-2 bg-amber-100 text-amber-900 border border-slate-200 w-10">HD</th>
+                  <th className="p-2 bg-rose-100 text-rose-900 border border-slate-200 w-10">A</th>
+                  <th className="p-2 bg-indigo-100 text-indigo-900 border border-slate-200 w-12">OT</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-[11px]">
+                {siteLaborers.length === 0 ? (
+                  <tr>
+                    <td colSpan={daysArray.length + 8} className="p-8 text-center text-slate-400">
+                      No workers found matching selected site & sponsor filter.
+                    </td>
+                  </tr>
+                ) : (
+                  siteLaborers.map((lab) => {
+                    let pTotal = 0;
+                    let hdTotal = 0;
+                    let aTotal = 0;
+                    let otTotal = 0;
+                    const isChecked = selectedWorkerIds.includes(lab.id);
 
-        {/* Friday Banner if applicable */}
-        {isSelectedDateFriday && (
-          <div className="mx-4 mt-3 p-3 bg-amber-500/10 border border-amber-500/30 text-amber-900 rounded-xl flex items-center justify-between text-xs font-medium">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-amber-600" />
-              <span>
-                <strong>Friday Official Holiday:</strong> Friday base salary is automatically paid. Working on Friday will log Overtime Pay.
+                    const dayCells = daysArray.map((d) => {
+                      const dStr = `${selectedMonth}-${String(d).padStart(2, '0')}`;
+                      const rec = attendanceList.find((a) => a.userId === lab.id && a.date === dStr);
+                      const fri = isFridayDay(d);
+
+                      if (rec) {
+                        if (rec.status === 'Present') pTotal++;
+                        else if (rec.status === 'Half-Day') hdTotal++;
+                        else if (rec.status === 'Absent') aTotal++;
+                        if (rec.overtimeHours) otTotal += rec.overtimeHours;
+                      }
+
+                      const handleCellClick = () => {
+                        if (currentUser.role === 'Labor') return; // Read-only for labor
+                        let nextStatus: AttendanceStatus = 'Present';
+                        if (!rec || rec.status === 'Present') nextStatus = 'Half-Day';
+                        else if (rec.status === 'Half-Day') nextStatus = 'Absent';
+                        else if (rec.status === 'Absent') nextStatus = 'Present';
+
+                        onSaveAttendance([
+                          {
+                            id: rec?.id || `att-${lab.id}-${dStr}`,
+                            userId: lab.id,
+                            siteId: selectedSiteId,
+                            date: dStr,
+                            status: nextStatus,
+                            markedBy: currentUser.id,
+                            notes: rec?.notes || '',
+                            overtimeHours: rec?.overtimeHours || 0
+                          }
+                        ]);
+                      };
+
+                      return (
+                        <td
+                          key={d}
+                          onClick={handleCellClick}
+                          title={`${lab.name} - ${dStr}: ${rec?.status || 'Unmarked'}. Click to cycle.`}
+                          className={`p-1 border border-slate-200 cursor-pointer select-none transition-colors ${
+                            fri ? 'bg-indigo-50/50' : ''
+                          }`}
+                        >
+                          {rec?.status === 'Present' ? (
+                            <span className="px-1 py-0.5 rounded bg-emerald-500 text-white font-black text-[9px] block">
+                              P
+                            </span>
+                          ) : rec?.status === 'Half-Day' ? (
+                            <span className="px-1 py-0.5 rounded bg-amber-500 text-white font-black text-[9px] block">
+                              HD
+                            </span>
+                          ) : rec?.status === 'Absent' ? (
+                            <span className="px-1 py-0.5 rounded bg-rose-600 text-white font-black text-[9px] block">
+                              A
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-mono text-[9px] block">-</span>
+                          )}
+                        </td>
+                      );
+                    });
+
+                    return (
+                      <tr key={lab.id} className={isChecked ? 'bg-indigo-50/30' : 'hover:bg-slate-50'}>
+                        <td className="p-2 text-center border border-slate-200">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleSelectWorker(lab.id)}
+                            className="w-3.5 h-3.5 rounded text-indigo-600 border-slate-300 cursor-pointer"
+                          />
+                        </td>
+                        <td className="p-2 text-left font-mono font-bold text-slate-800 border border-slate-200">
+                          {lab.loginSerial || lab.id.slice(-6)}
+                        </td>
+                        <td className="p-2 text-left font-bold text-slate-900 border border-slate-200">
+                          {lab.name}
+                        </td>
+                        <td className="p-2 text-left text-slate-500 text-[10px] border border-slate-200">
+                          {lab.sponsorName || 'Direct Hire'}
+                        </td>
+                        {dayCells}
+                        <td className="p-2 font-black text-emerald-700 bg-emerald-50 border border-slate-200">{pTotal}</td>
+                        <td className="p-2 font-black text-amber-700 bg-amber-50 border border-slate-200">{hdTotal}</td>
+                        <td className="p-2 font-black text-rose-700 bg-rose-50 border border-slate-200">{aTotal}</td>
+                        <td className="p-2 font-black text-indigo-700 bg-indigo-50 border border-slate-200">
+                          {otTotal ? `+${otTotal}` : '0'}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        /* Roll Call Matrix for Active Site */
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+          <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">
+                Roll Call Sheet: {activeSite?.name || 'Site'}
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                {siteLaborers.length} assigned laborers • Date: {selectedDate} • Sponsor Filter: {selectedSponsor}
+              </p>
+            </div>
+
+            <button
+              onClick={toggleSelectAllWorkers}
+              className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+            >
+              {selectedWorkerIds.length === siteLaborers.length ? (
+                <>
+                  <CheckSquare className="w-4 h-4 text-indigo-600" /> Deselect All
+                </>
+              ) : (
+                <>
+                  <Square className="w-4 h-4 text-slate-400" /> Select All for Printing
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Friday Banner if applicable */}
+          {isSelectedDateFriday && (
+            <div className="mx-4 mt-3 p-3 bg-amber-500/10 border border-amber-500/30 text-amber-900 rounded-xl flex items-center justify-between text-xs font-medium">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-600" />
+                <span>
+                  <strong>Friday Official Holiday:</strong> Friday base salary is automatically paid. Working on Friday will log Overtime Pay.
+                </span>
+              </div>
+              <span className="px-2 py-0.5 bg-amber-200 text-amber-900 text-[10px] font-bold uppercase rounded font-mono">
+                Friday OT Rate Active
               </span>
             </div>
-            <span className="px-2 py-0.5 bg-amber-200 text-amber-900 text-[10px] font-bold uppercase rounded font-mono">
-              Friday OT Rate Active
-            </span>
-          </div>
-        )}
+          )}
 
-        {siteLaborers.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 space-y-2">
-            <UserCheck className="w-8 h-8 mx-auto text-slate-300" />
-            <p className="text-sm font-medium">No laborers found matching this site & sponsor filter.</p>
-            <p className="text-xs">Select "All Sponsors" or allocate labor workforce in "Sites".</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {siteLaborers.map((lab) => {
-              const currentStatus = draftAttendance[lab.id]?.status || 'Present';
-              const currentNotes = draftAttendance[lab.id]?.notes || '';
-              const currentOT = draftAttendance[lab.id]?.overtimeHours || 0;
-              const isChecked = selectedWorkerIds.includes(lab.id);
+          {siteLaborers.length === 0 ? (
+            <div className="p-12 text-center text-slate-400 space-y-2">
+              <UserCheck className="w-8 h-8 mx-auto text-slate-300" />
+              <p className="text-sm font-medium">No laborers found matching this site & sponsor filter.</p>
+              <p className="text-xs">Select "All Sponsors" or allocate labor workforce in "Sites".</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {siteLaborers.map((lab) => {
+                const currentStatus = draftAttendance[lab.id]?.status || 'Present';
+                const currentNotes = draftAttendance[lab.id]?.notes || '';
+                const currentOT = draftAttendance[lab.id]?.overtimeHours || 0;
+                const isChecked = selectedWorkerIds.includes(lab.id);
 
-              return (
-                <div
-                  key={lab.id}
-                  className={`p-4 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 ${
-                    isChecked ? 'bg-indigo-50/40' : 'hover:bg-slate-50/70'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={() => toggleSelectWorker(lab.id)}
-                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
-                    />
-
-                    <img
-                      src={lab.avatar || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150'}
-                      alt={lab.name}
-                      className="w-10 h-10 rounded-full object-cover border border-slate-200"
-                    />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-bold text-slate-900">{lab.name}</h4>
-                        <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold text-[10px] border border-slate-200">
-                          {lab.sponsorName || 'Direct Hire'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500">
-                        {lab.designation || 'Laborer'} • Iqama: <span className="font-mono font-semibold text-slate-800">{lab.iqamaId || 'N/A'}</span> • Rate: <span className="font-semibold text-slate-700">${lab.dailyRate}/day</span>
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Status Toggle Buttons & Overtime Input */}
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                    <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
-                      <button
-                        type="button"
-                        onClick={() => handleStatusToggle(lab.id, 'Present')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
-                          currentStatus === 'Present'
-                            ? 'bg-emerald-600 text-white shadow-xs'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Present (1.0)
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleStatusToggle(lab.id, 'Half-Day')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
-                          currentStatus === 'Half-Day'
-                            ? 'bg-amber-500 text-white shadow-xs'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        <Clock className="w-3.5 h-3.5" /> Half-Day (0.5)
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleStatusToggle(lab.id, 'Absent')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
-                          currentStatus === 'Absent'
-                            ? 'bg-red-600 text-white shadow-xs'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        <XCircle className="w-3.5 h-3.5" /> Absent (0.0)
-                      </button>
-                    </div>
-
-                    {/* Overtime Hours Logger */}
-                    <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-xl">
-                      <Clock className="w-3.5 h-3.5 text-indigo-600" />
-                      <span className="text-[11px] font-bold text-indigo-900 whitespace-nowrap">OT Hours:</span>
+                return (
+                  <div
+                    key={lab.id}
+                    className={`p-4 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                      isChecked ? 'bg-indigo-50/40' : 'hover:bg-slate-50/70'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
                       <input
-                        type="number"
-                        min="0"
-                        max="12"
-                        step="0.5"
-                        value={currentOT || ''}
-                        onChange={(e) => handleOvertimeChange(lab.id, parseFloat(e.target.value) || 0)}
-                        placeholder="0"
-                        className="w-12 px-1.5 py-0.5 bg-white border border-indigo-300 rounded text-xs font-mono font-bold text-indigo-900 text-center focus:ring-1 focus:ring-indigo-500"
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleSelectWorker(lab.id)}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                      />
+
+                      <img
+                        src={lab.avatar || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150'}
+                        alt={lab.name}
+                        className="w-10 h-10 rounded-full object-cover border border-slate-200"
+                      />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-slate-900">{lab.name}</h4>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold text-[10px] border border-slate-200">
+                            {lab.sponsorName || 'Direct Hire'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          {lab.designation || 'Laborer'} • Iqama: <span className="font-mono font-semibold text-slate-800">{lab.iqamaId || 'N/A'}</span> • Rate: <span className="font-semibold text-slate-700">${lab.dailyRate}/day</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Status Toggle Buttons & Overtime Input */}
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                      <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => handleStatusToggle(lab.id, 'Present')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                            currentStatus === 'Present'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Present (1.0)
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleStatusToggle(lab.id, 'Half-Day')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                            currentStatus === 'Half-Day'
+                              ? 'bg-amber-500 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <Clock className="w-3.5 h-3.5" /> Half-Day (0.5)
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleStatusToggle(lab.id, 'Absent')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                            currentStatus === 'Absent'
+                              ? 'bg-red-600 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <XCircle className="w-3.5 h-3.5" /> Absent (0.0)
+                        </button>
+                      </div>
+
+                      {/* Overtime Hours Logger */}
+                      <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-xl">
+                        <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                        <span className="text-[11px] font-bold text-indigo-900 whitespace-nowrap">OT Hours:</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="12"
+                          step="0.5"
+                          value={currentOT || ''}
+                          onChange={(e) => handleOvertimeChange(lab.id, parseFloat(e.target.value) || 0)}
+                          placeholder="0"
+                          className="w-12 px-1.5 py-0.5 bg-white border border-indigo-300 rounded text-xs font-mono font-bold text-indigo-900 text-center focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+
+                      <input
+                        type="text"
+                        placeholder="Optional notes..."
+                        value={currentNotes}
+                        onChange={(e) => handleNotesChange(lab.id, e.target.value)}
+                        className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-36"
                       />
                     </div>
-
-                    <input
-                      type="text"
-                      placeholder="Optional notes..."
-                      value={currentNotes}
-                      onChange={(e) => handleNotesChange(lab.id, e.target.value)}
-                      className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-36"
-                    />
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* History Log */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">

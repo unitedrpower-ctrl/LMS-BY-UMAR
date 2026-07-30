@@ -18,7 +18,8 @@ import {
   RefreshCw,
   X,
   Crown,
-  Sparkles
+  Sparkles,
+  Building2
 } from 'lucide-react';
 import { validateInvitationApi, googleAuthApi, requestMasterOtpApi, verifyMasterOtpApi, registerUserApi, requestPasswordResetApi, resetPasswordApi } from '../../lib/api';
 
@@ -44,7 +45,14 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                         window.location.pathname.includes('/client') ||
                         window.location.search.includes('client=true');
 
-  const [activeTab, setActiveTab] = useState<'adminLogin' | 'workerLogin' | 'signUp' | 'masterOtp' | 'forgotPassword' | 'resetPassword'>(isClientRoute ? 'workerLogin' : 'adminLogin');
+  const isWorkerRoute = window.location.pathname.includes('/login/worker') || 
+                        window.location.pathname.includes('/worker-login') ||
+                        window.location.search.includes('companyToken=') ||
+                        window.location.search.includes('company_id=') ||
+                        window.location.search.includes('companyId=') ||
+                        isClientRoute;
+
+  const [activeTab, setActiveTab] = useState<'adminLogin' | 'workerLogin' | 'signUp' | 'masterOtp' | 'forgotPassword' | 'resetPassword'>(isWorkerRoute ? 'workerLogin' : 'adminLogin');
 
   // Form States
   const [emailOrSerial, setEmailOrSerial] = useState('');
@@ -332,19 +340,49 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
     setErrorMessage('');
     setSuccessMessage('');
 
-    const target = users.find(
+    const params = new URLSearchParams(window.location.search);
+    const companyTokenParam = params.get('companyToken') || params.get('company_id') || params.get('companyId') || params.get('tenantId') || params.get('company');
+
+    const cleanInput = emailOrSerial.trim().toLowerCase();
+    const cleanPass = password.trim();
+
+    let matchingWorkers = users.filter((u) => u.role === 'Labor');
+
+    // Read companyToken / company_id parameter directly from the URL and validate strictly
+    if (companyTokenParam && companyTokenParam !== 'all') {
+      const companySpecificWorkers = matchingWorkers.filter(
+        (u) => 
+          u.companyId === companyTokenParam || 
+          (u.companyId && u.companyId.toLowerCase() === companyTokenParam.toLowerCase())
+      );
+
+      if (companySpecificWorkers.length > 0) {
+        matchingWorkers = companySpecificWorkers;
+      } else {
+        // Fallback match for legacy records or default company identifier
+        matchingWorkers = matchingWorkers.filter(
+          (u) => !u.companyId || u.companyId === 'comp-001' || companyTokenParam === 'comp-001' || companyTokenParam === 'tenant'
+        );
+      }
+    }
+
+    const target = matchingWorkers.find(
       (u) => 
-        u.role === 'Labor' && 
-        (u.loginSerial?.toLowerCase() === emailOrSerial.toLowerCase().trim() || 
-         u.email.toLowerCase() === emailOrSerial.toLowerCase().trim())
+        (u.loginSerial?.toLowerCase() === cleanInput || 
+         u.email.toLowerCase() === cleanInput ||
+         (u.iqamaId && u.iqamaId.toLowerCase() === cleanInput))
     );
 
     if (!target) {
-      setErrorMessage('Worker Serial Number not found. Check your payslip or contact your Site Supervisor.');
+      if (companyTokenParam) {
+        setErrorMessage(`Worker Serial Number or Iqama ID "${emailOrSerial}" was not found under company portal "${companyTokenParam}". Please verify your credentials or contact HR.`);
+      } else {
+        setErrorMessage('Worker Serial Number not found. Check your payslip or contact your Site Supervisor.');
+      }
       return;
     }
 
-    if (target.loginPassword && target.loginPassword !== password) {
+    if (target.loginPassword && target.loginPassword !== cleanPass) {
       setErrorMessage('Incorrect Worker Password. Please verify password with HR.');
       return;
     }
@@ -354,7 +392,12 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
       return;
     }
 
-    onLogin(target);
+    const workerUser: User = {
+      ...target,
+      companyId: target.companyId || companyTokenParam || 'comp-001'
+    };
+
+    onLogin(workerUser);
   };
 
   // Handle Forgot Password Request
@@ -1202,6 +1245,23 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
         {/* Tab 2: Worker Login */}
         {activeTab === 'workerLogin' && (
           <form onSubmit={handleWorkerLoginSubmit} className="space-y-4 text-xs">
+            {(() => {
+              const params = new URLSearchParams(window.location.search);
+              const compToken = params.get('companyToken') || params.get('company_id') || params.get('companyId') || params.get('tenantId') || params.get('company');
+              if (!compToken) return null;
+              return (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-300 text-xs font-semibold flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>Dedicated Company Portal: <strong className="text-white font-mono">{compToken}</strong></span>
+                  </div>
+                  <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] font-bold rounded uppercase font-mono">
+                    Scoped
+                  </span>
+                </div>
+              );
+            })()}
+
             <div>
               <label className="block font-bold text-slate-300 mb-1">Worker Login Serial Number</label>
               <div className="relative">

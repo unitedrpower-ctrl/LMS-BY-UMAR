@@ -61,8 +61,16 @@ export default function App() {
     maxDailyComplaints: 3
   });
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
-    const isRegisterPath = window.location.pathname.startsWith('/register') || window.location.pathname.startsWith('/accept-invite') || window.location.search.includes('token=') || window.location.search.includes('inviteToken=');
-    if (isRegisterPath) {
+    const search = window.location.search;
+    const pathname = window.location.pathname;
+    const isRegisterOrWorkerPath = pathname.startsWith('/register') || 
+                                   pathname.startsWith('/accept-invite') || 
+                                   pathname.startsWith('/login/worker') || 
+                                   search.includes('token=') || 
+                                   search.includes('inviteToken=') || 
+                                   search.includes('companyToken=') || 
+                                   search.includes('tenantId=');
+    if (isRegisterOrWorkerPath) {
       localStorage.removeItem('lms_current_user_id');
       localStorage.removeItem('lms_user_role');
       localStorage.removeItem('lms_user_email');
@@ -194,7 +202,7 @@ export default function App() {
     const isMaster = currentUser.role === 'Owner';
 
     if (currentUser.role === 'Labor') {
-      const allowedLaborTabs = ['dashboard', 'attendance', 'payroll', 'complaints', 'notices', 'documents', 'security'];
+      const allowedLaborTabs = ['dashboard', 'attendance', 'payroll', 'complaints', 'notices', 'security'];
       if (!allowedLaborTabs.includes(activeTab)) {
         setActiveTab('dashboard');
       }

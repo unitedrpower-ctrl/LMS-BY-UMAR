@@ -50,7 +50,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor', 'Labor']
     },
     { id: 'notices', label: t('notices', 'Notices'), icon: Megaphone, roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor', 'Labor'] },
-    { id: 'documents', label: t('documents', 'Document Vault'), icon: FolderLock, roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor', 'Labor'] },
+    { id: 'documents', label: t('documents', 'Document Vault'), icon: FolderLock, roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor'] },
     { id: 'sites', label: t('sites', 'Sites'), icon: Building2, roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor'] },
     { id: 'users', label: 'Staff & Role Invites', icon: Users, roles: ['Owner', 'Super Admin', 'HR Admin'] },
     { 

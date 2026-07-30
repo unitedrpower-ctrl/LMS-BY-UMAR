@@ -18,7 +18,8 @@ import {
   UserCheck, 
   Clock, 
   CheckCircle2, 
-  AlertCircle
+  AlertCircle,
+  FolderLock
 } from 'lucide-react';
 
 interface DocumentViewProps {
@@ -51,7 +52,21 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string>('');
 
-  const isAdmin = currentUser.role === 'Super Admin' || currentUser.role === 'HR Admin' || currentUser.role === 'Site Supervisor';
+  const isAdmin = currentUser.role === 'Owner' || currentUser.role === 'Super Admin' || currentUser.role === 'HR Admin' || currentUser.role === 'Site Supervisor';
+
+  if (currentUser.role === 'Labor') {
+    return (
+      <div id="view-documents-restricted" className="p-8 text-center bg-slate-900 border border-slate-800 rounded-2xl shadow-sm text-slate-300 space-y-4 my-6">
+        <div className="w-16 h-16 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto border border-rose-500/20">
+          <FolderLock className="w-8 h-8" />
+        </div>
+        <h3 className="text-xl font-bold text-white">Access Restricted: Document Vault</h3>
+        <p className="text-sm text-slate-400 max-w-md mx-auto">
+          The Document Vault and corporate contracts are restricted exclusively to HR Administrators, Master Owners, and authorized Site Supervisors.
+        </p>
+      </div>
+    );
+  }
 
   // Categories list
   const categories: DocumentItem['category'][] = [

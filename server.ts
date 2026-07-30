@@ -2058,18 +2058,26 @@ System Administration • LMS by Umar`;
   });
 
   // 3. Sites Endpoint
-  app.get('/api/sites', (req, res) => {
-    res.json(sites);
+  app.get('/api/sites', (req: AuthenticatedRequest, res) => {
+    if (req.userRole === 'Owner') {
+      return res.json(sites);
+    }
+    const tenantSites = sites.filter(s => (s.companyId || 'comp-001') === req.companyId);
+    res.json(tenantSites);
   });
 
   app.post('/api/sites', (req: AuthenticatedRequest, res) => {
-    if (req.userRole !== 'Super Admin') {
-      return res.status(403).json({ error: 'Forbidden: Only Super Admin can modify site configurations.' });
+    if (req.userRole !== 'Super Admin' && req.userRole !== 'Owner') {
+      return res.status(403).json({ error: 'Forbidden: Only Super Admin or Owner can modify site configurations.' });
     }
 
     const siteData: Site = req.body;
     if (!siteData.id) {
       siteData.id = `site-${Date.now()}`;
+    }
+
+    if (!siteData.companyId) {
+      siteData.companyId = req.companyId || 'comp-001';
     }
 
     const idx = sites.findIndex(s => s.id === siteData.id);
@@ -2086,6 +2094,12 @@ System Administration • LMS by Umar`;
   app.get('/api/attendance', (req: AuthenticatedRequest, res) => {
     const { siteId, userId, date } = req.query;
     let filtered = [...attendanceRecords];
+
+    // Strict Tenant Isolation: filter by tenant companyId
+    if (req.userRole !== 'Owner') {
+      const companyUserIds = new Set(users.filter(u => (u.companyId || 'comp-001') === req.companyId).map(u => u.id));
+      filtered = filtered.filter(a => (a.companyId && a.companyId === req.companyId) || companyUserIds.has(a.userId));
+    }
 
     // RBAC Rule for Site Supervisor: view only assigned site
     if (req.userRole === 'Site Supervisor' && req.currentUser?.siteId) {
@@ -2167,6 +2181,12 @@ System Administration • LMS by Umar`;
   // 5. Payroll Endpoints (Dynamic Payroll Calculation Logic)
   app.get('/api/payroll', (req: AuthenticatedRequest, res) => {
     let filtered = [...payrolls];
+
+    // Strict Tenant Isolation: filter by tenant companyId
+    if (req.userRole !== 'Owner') {
+      const companyUserIds = new Set(users.filter(u => (u.companyId || 'comp-001') === req.companyId).map(u => u.id));
+      filtered = filtered.filter(p => (p.companyId && p.companyId === req.companyId) || companyUserIds.has(p.userId));
+    }
 
     // RBAC Rule for Labor: read-only worker portal access to own payroll
     if (req.userRole === 'Labor' && req.currentUser) {
@@ -2537,6 +2557,12 @@ System Administration • LMS by Umar`;
   app.get('/api/complaints', (req: AuthenticatedRequest, res) => {
     let filtered = [...complaints];
 
+    // Strict Tenant Isolation: filter by tenant companyId
+    if (req.userRole !== 'Owner') {
+      const companyUserIds = new Set(users.filter(u => (u.companyId || 'comp-001') === req.companyId).map(u => u.id));
+      filtered = filtered.filter(c => (c.companyId && c.companyId === req.companyId) || companyUserIds.has(c.userId));
+    }
+
     // RBAC Rule for Site Supervisor: view complaints for their assigned site only
     if (req.userRole === 'Site Supervisor' && req.currentUser?.siteId) {
       filtered = filtered.filter(c => c.siteId === req.currentUser?.siteId);
@@ -2620,8 +2646,12 @@ System Administration • LMS by Umar`;
   });
 
   // 8. Notices Endpoint
-  app.get('/api/notices', (req, res) => {
-    res.json(notices);
+  app.get('/api/notices', (req: AuthenticatedRequest, res) => {
+    let filtered = [...notices];
+    if (req.userRole !== 'Owner') {
+      filtered = filtered.filter(n => (n.companyId || 'comp-001') === req.companyId);
+    }
+    res.json(filtered);
   });
 
   app.post('/api/notices', (req: AuthenticatedRequest, res) => {
