@@ -504,6 +504,8 @@ export async function requestPasswordResetApi(email: string): Promise<{
 export async function resetPasswordApi(token: string, newPassword: string): Promise<{
   success: boolean;
   message: string;
+  role?: string;
+  companyId?: string;
 }> {
   return fetchApi('/api/auth/reset-password', {
     method: 'POST',

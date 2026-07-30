@@ -7,6 +7,7 @@ import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import ExcelJS from 'exceljs';
 import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
 import { User, Site, Attendance, Payroll, Complaint, Notice, UserRole, RoleInvitation, Company, SubscriptionPlanType, DocumentItem } from './src/types.js';
 import { 
@@ -333,6 +334,74 @@ export function createSmtpTransporter() {
   } as any);
 }
 
+// =========================================================================
+// UNIFIED EMAIL NOTIFICATION SYSTEM (RESEND ENGINE & SMTP FALLBACK)
+// =========================================================================
+const resendApiKey = process.env.RESEND_API_KEY?.trim();
+const fromEmail = process.env.FROM_EMAIL || 'onboarding@resend.dev';
+
+let resendClient: Resend | null = null;
+if (resendApiKey && !resendApiKey.includes('your_api_key') && !resendApiKey.includes('re_your_api_key')) {
+  resendClient = new Resend(resendApiKey);
+  console.log(`[RESEND ENGINE INITIALIZED] API Key configured successfully. Sender: ${fromEmail}`);
+} else {
+  console.log('[RESEND ENGINE WARNING] RESEND_API_KEY is not defined or is placeholder. Falling back to SMTP Transporter or Simulated Logging.');
+}
+
+export async function sendEmail(params: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<{ success: boolean; messageId?: string; error?: string; method: string }> {
+  const normalizedTo = params.to.trim().toLowerCase();
+  console.log(`[UNIFIED EMAIL DISPATCH] Target: "${normalizedTo}" | Subject: "${params.subject}"`);
+
+  if (resendClient) {
+    try {
+      const res = await resendClient.emails.send({
+        from: fromEmail,
+        to: normalizedTo,
+        subject: params.subject,
+        html: params.html
+      });
+
+      if (res.error) {
+        console.error('[RESEND DISPATCH ERROR RESPONSE]:', res.error);
+        throw new Error(res.error.message);
+      }
+
+      const mId = res.data?.id || `resend-id-${Date.now()}`;
+      console.log(`[RESEND DISPATCH SUCCESS] MessageID: ${mId}`);
+      return { success: true, messageId: mId, method: 'RESEND' };
+    } catch (err: any) {
+      console.error(`[RESEND DISPATCH FAILED] Error: ${err.message}. Attempting SMTP Fallback...`);
+    }
+  }
+
+  // SMTP Fallback
+  const smtpTransporter = createSmtpTransporter();
+  if (smtpTransporter) {
+    try {
+      const smtpFrom = process.env.SMTP_FROM || `LMS by Umar <${process.env.SMTP_USER || 'umarchoudhary259@gmail.com'}>`;
+      const info = await smtpTransporter.sendMail({
+        from: smtpFrom,
+        to: normalizedTo,
+        subject: params.subject,
+        html: params.html
+      });
+      console.log(`[SMTP FALLBACK SUCCESS] MessageID: ${info.messageId}`);
+      return { success: true, messageId: info.messageId, method: 'SMTP' };
+    } catch (smtpErr: any) {
+      console.error(`[SMTP FALLBACK FAILED] Error: ${smtpErr.message}`);
+      return { success: false, error: smtpErr.message, method: 'SMTP_FAILED' };
+    }
+  }
+
+  // Simulated fallback
+  console.log(`[SIMULATED DISPATCH ONLY] Both Resend and SMTP configurations are inactive. Emailed HTML was logged.`);
+  return { success: true, messageId: `simulated-id-${Date.now()}`, method: 'SIMULATION' };
+}
+
 // Automatic Email Invitation Dispatcher Service (Nodemailer / SMTP & Automated Email Service)
 export interface EmailDispatchResult {
   sent: boolean;
@@ -358,6 +427,8 @@ export async function sendClientInvitationEmail(params: {
   initialPassword?: string;
 }): Promise<EmailDispatchResult> {
   const baseUrl = getAppBaseUrl(params.req);
+  const adminLoginUrl = `${baseUrl}/login/admin?company=${params.companyId}`;
+  const workerLoginUrl = `${baseUrl}/login/worker?company=${params.companyId}`;
   const inviteUrl = `${baseUrl}/register?token=${params.inviteToken}&company=${params.companyId}`;
   const role = params.role || 'Super Admin';
   const initialPassword = params.initialPassword || 'LMS#Welcome2026';
@@ -368,37 +439,41 @@ export async function sendClientInvitationEmail(params: {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Activate Your LMS Workspace</title>
+    <title>Welcome to LMS SaaS - Workspace Credentials</title>
   </head>
   <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0f172a; margin: 0; padding: 24px; color: #e2e8f0;">
     <div style="max-width: 600px; margin: 0 auto; background-color: #1e293b; border: 1px solid #334155; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);">
       
       <!-- Banner Header -->
       <div style="background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); padding: 32px 24px; text-align: center; border-bottom: 2px solid #3b82f6;">
-        <div style="display: inline-block; background-color: #0f172a; padding: 10px 18px; border-radius: 9999px; border: 1px solid #f59e0b; margin-bottom: 12px;">
-          <span style="color: #fbbf24; font-weight: 900; font-size: 14px; letter-spacing: 1px;">LMS BY UMAR</span>
+        <div style="display: inline-block; background-color: #0f172a; padding: 10px 18px; border-radius: 9999px; border: 1px solid #3b82f6; margin-bottom: 12px;">
+          <span style="color: #60a5fa; font-weight: 900; font-size: 14px; letter-spacing: 1px;">LMS BY UMAR</span>
         </div>
-        <h1 style="color: #ffffff; font-size: 24px; font-weight: 800; margin: 0; letter-spacing: -0.5px;">Welcome to Your Dedicated LMS Workspace</h1>
-        <p style="color: #94a3b8; font-size: 14px; margin-top: 6px;">Labor, Attendance & HR Enterprise SaaS Management System</p>
+        <h1 style="color: #ffffff; font-size: 24px; font-weight: 800; margin: 0; letter-spacing: -0.5px;">Workspace Onboarded Successfully</h1>
+        <p style="color: #94a3b8; font-size: 14px; margin-top: 6px;">Labor, Attendance & HR Enterprise Management Platform</p>
       </div>
 
       <!-- Main Body -->
       <div style="padding: 32px 28px;">
         <p style="font-size: 16px; color: #f8fafc; font-weight: 600; margin-top: 0;">Hello ${params.adminName},</p>
         <p style="font-size: 14px; color: #cbd5e1; line-height: 1.6;">
-          Your company <strong style="color: #38bdf8;">"${params.companyName}"</strong> has been successfully onboarded by Platform Owner Umar on LMS SaaS.
+          Your company has been successfully onboarded onto LMS SaaS. Your tenant configuration is ready.
         </p>
 
         <!-- Company & Subscription Card -->
         <div style="background-color: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin: 24px 0;">
-          <h3 style="color: #fbbf24; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-top: 0; margin-bottom: 12px; border-bottom: 1px solid #1e293b; padding-bottom: 8px;">🏢 Workspace & Subscription Overview</h3>
+          <h3 style="color: #fbbf24; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-top: 0; margin-bottom: 12px; border-bottom: 1px solid #1e293b; padding-bottom: 8px;">🏢 Workspace Tenancy Details</h3>
           <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #cbd5e1;">
             <tr>
-              <td style="padding: 6px 0; color: #94a3b8;">Client Company:</td>
+              <td style="padding: 6px 0; color: #94a3b8;">Company Name:</td>
               <td style="padding: 6px 0; text-align: right; font-weight: bold; color: #ffffff;">${params.companyName}</td>
             </tr>
             <tr>
-              <td style="padding: 6px 0; color: #94a3b8;">Administrator Email:</td>
+              <td style="padding: 6px 0; color: #94a3b8;">Tenant ID:</td>
+              <td style="padding: 6px 0; text-align: right; font-weight: bold; color: #38bdf8; font-family: monospace;">${params.companyId}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8;">Registered Admin:</td>
               <td style="padding: 6px 0; text-align: right; font-weight: bold; color: #ffffff; font-family: monospace;">${params.adminEmail}</td>
             </tr>
             <tr>
@@ -413,44 +488,46 @@ export async function sendClientInvitationEmail(params: {
               <td style="padding: 6px 0; color: #94a3b8;">Valid Until:</td>
               <td style="padding: 6px 0; text-align: right; font-weight: bold; color: #f43f5e;">${params.subscriptionEndDate}</td>
             </tr>
+          </table>
+        </div>
+
+        <!-- Credentials Card -->
+        <div style="background-color: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin: 24px 0;">
+          <h3 style="color: #60a5fa; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-top: 0; margin-bottom: 12px; border-bottom: 1px solid #1e293b; padding-bottom: 8px;">🔑 Access & Temporary Credentials</h3>
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #cbd5e1;">
             <tr>
-              <td style="padding: 6px 0; color: #94a3b8;">Authorized Capacity:</td>
-              <td style="padding: 6px 0; text-align: right; font-weight: bold; color: #ffffff;">Up to ${params.maxLaborersAllowed} Workers</td>
+              <td style="padding: 6px 0; color: #94a3b8;">Login Email:</td>
+              <td style="padding: 6px 0; text-align: right; font-weight: bold; color: #ffffff; font-family: monospace;">${params.adminEmail}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #94a3b8;">Temporary Password:</td>
+              <td style="padding: 6px 0; text-align: right; font-weight: bold; color: #fbbf24; font-family: monospace; background: #1e293b; padding: 2px 6px; border-radius: 4px;">${initialPassword}</td>
             </tr>
           </table>
         </div>
 
-        <!-- Call to Action Button -->
+        <!-- Buttons -->
         <div style="text-align: center; margin: 32px 0;">
-          <a href="${inviteUrl}" target="_blank" style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; text-decoration: none; padding: 16px 36px; border-radius: 12px; font-weight: 800; font-size: 15px; display: inline-block; box-shadow: 0 10px 20px -5px rgba(37,99,235,0.4); border: 1px solid #60a5fa;">
-            🚀 Activate & Access Your LMS Workspace
+          <a href="${adminLoginUrl}" target="_blank" style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 10px; font-weight: 800; font-size: 14px; display: inline-block; box-shadow: 0 10px 20px -5px rgba(37,99,235,0.4); border: 1px solid #60a5fa; margin-bottom: 12px;">
+            💻 Access Company Admin Portal
+          </a>
+          <br>
+          <a href="${workerLoginUrl}" target="_blank" style="background: linear-gradient(135deg, #059669 0%, #047857 100%); color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-weight: 800; font-size: 13px; display: inline-block; border: 1px solid #34d399;">
+            👷 Access Worker Portal Link
           </a>
         </div>
 
-        <p style="font-size: 12px; color: #94a3b8; text-align: center; margin-top: 16px;">
-          Or copy & paste this direct invitation link into your web browser:<br>
+        <!-- Direct Invite URL -->
+        <div style="background-color: #0f172a; border-left: 4px solid #3b82f6; padding: 14px 18px; border-radius: 0 12px 12px 0; margin-top: 24px; font-size: 13px; color: #cbd5e1; line-height: 1.5;">
+          <strong style="color: #60a5fa; display: block; margin-bottom: 6px;">⚡ Direct Workspace Activation Link (Google SSO or Activation):</strong>
           <a href="${inviteUrl}" style="color: #60a5fa; word-break: break-all; font-family: monospace;">${inviteUrl}</a>
-        </p>
-
-        <!-- Instructions -->
-        <div style="background-color: #0f172a; border-left: 4px solid #f59e0b; padding: 14px 18px; border-radius: 0 12px 12px 0; margin-top: 24px; font-size: 13px; color: #cbd5e1; line-height: 1.5;">
-          <strong style="color: #fbbf24; display: block; margin-bottom: 6px;">⚡ How to Claim Your Workspace:</strong>
-          <strong>Option 1 (Direct Login - Recommended):</strong><br>
-          1. Open the portal link: <a href="${baseUrl}" style="color: #60a5fa; text-decoration: underline;">${baseUrl}</a><br>
-          2. Log in using your Registered Email: <code style="color: #38bdf8; font-weight: bold;">${params.adminEmail}</code><br>
-          3. Use your Assigned Initial Password: <code style="color: #fbbf24; font-weight: bold; font-family: monospace; font-size: 14px; background: #1e293b; padding: 2px 6px; border-radius: 4px;">${initialPassword}</code><br><br>
-          
-          <strong>Option 2 (Google SSO Integration):</strong><br>
-          1. Click the button above or open the link, then click <strong>"Continue with Google"</strong>.<br>
-          2. Use your email: <code style="color: #38bdf8;">${params.adminEmail}</code>.<br>
-          3. Your workspace is immediately mapped with full <strong>${role}</strong> rights.
         </div>
 
       </div>
 
       <!-- Footer -->
       <div style="background-color: #0f172a; padding: 20px; text-align: center; border-top: 1px solid #334155; font-size: 11px; color: #64748b;">
-        <p style="margin: 0;">Automated Email Dispatch Service • LMS by Umar Enterprise Systems</p>
+        <p style="margin: 0;">Automated Onboarding Dispatch Service • LMS by Umar Enterprise Systems</p>
         <p style="margin: 4px 0 0 0;">Platform Owner & System Administrator: Umar Chaudhary (unitedrpower@gmail.com)</p>
       </div>
 
@@ -459,51 +536,22 @@ export async function sendClientInvitationEmail(params: {
   </html>
   `;
 
-  const smtpUser = process.env.SMTP_USER;
-  const smtpFrom = process.env.SMTP_FROM || `LMS by Umar <${smtpUser || 'umarchoudhary259@gmail.com'}>`;
+  const emailRes = await sendEmail({
+    to: params.adminEmail,
+    subject: `[LMS by Umar] Welcome to LMS SaaS - Workspace Credentials for ${params.companyName}`,
+    html: htmlContent
+  });
 
-  try {
-    const transporter = createSmtpTransporter();
-    if (transporter) {
-      const info = await transporter.sendMail({
-        from: smtpFrom,
-        to: params.adminEmail,
-        subject: `[LMS by Umar] Official Workspace Activation: ${params.companyName}`,
-        html: htmlContent,
-      });
-
-      console.log(`[AUTOMATIC SMTP EMAIL DISPATCH SUCCESS] Emailed ${params.adminEmail} for company ${params.companyName}. MessageID: ${info.messageId}`);
-      return {
-        sent: true,
-        method: 'SMTP',
-        sentTo: params.adminEmail,
-        messageId: info.messageId,
-        inviteUrl,
-        message: `✉️ Automated HTML Email invitation dispatched to ${params.adminEmail} via SMTP.`
-      };
-    } else {
-      console.log(`[AUTOMATIC EMAIL DISPATCH LOG] Dispatched invitation email to ${params.adminEmail}`);
-      console.log(`[INVITATION LINK] ${inviteUrl}`);
-
-      return {
-        sent: true,
-        method: 'AUTOMATED_SIMULATED_DISPATCH',
-        sentTo: params.adminEmail,
-        inviteUrl,
-        message: `✉️ Automated Email invitation dispatched to ${params.adminEmail}! (Live link generated using dynamic domain: ${baseUrl})`
-      };
-    }
-  } catch (err: any) {
-    console.error(`[SMTP DISPATCH NOTICE / NETWORK WARNING] ${err.message}. Logging automated dispatch link.`);
-    return {
-      sent: true,
-      method: 'AUTOMATED_SIMULATED_DISPATCH',
-      sentTo: params.adminEmail,
-      inviteUrl,
-      message: `✉️ Automated Email invitation logged & ready for ${params.adminEmail}. (Notice: ${err.message})`,
-      error: err.message
-    };
-  }
+  return {
+    sent: emailRes.success,
+    method: emailRes.method === 'RESEND' ? 'SMTP' : 'AUTOMATED_SIMULATED_DISPATCH', // keep interface compatibility
+    sentTo: params.adminEmail,
+    messageId: emailRes.messageId,
+    inviteUrl,
+    message: emailRes.success 
+      ? `✉️ Automated welcome email successfully dispatched to ${params.adminEmail} via unified ${emailRes.method} engine.`
+      : `⚠️ Failed to send credentials email: ${emailRes.error || 'Unknown error'}`
+  };
 }
 
 // Helper: Send Secure Master Owner Verification Email (OTP) via SMTP/Nodemailer
@@ -558,9 +606,6 @@ export async function sendOtpEmail(email: string, otpCode: string): Promise<bool
   </html>
   `;
 
-  const smtpUser = process.env.SMTP_USER;
-  const smtpFrom = process.env.SMTP_FROM || `LMS by Umar <${smtpUser || 'umarchoudhary259@gmail.com'}>`;
-
   // Always output emergency console fallback so Master Owner can retrieve OTP instantly regardless of SMTP status
   console.log(`\n======================================================`);
   console.log(`🚨 [EMERGENCY MASTER OTP CONSOLE FALLBACK / DEV BYPASS]`);
@@ -570,31 +615,12 @@ export async function sendOtpEmail(email: string, otpCode: string): Promise<bool
   console.log(`Master Password: UmarMaster2026!`);
   console.log(`======================================================\n`);
 
-  try {
-    const transporter = createSmtpTransporter();
-    if (transporter) {
-      const info = await transporter.sendMail({
-        from: smtpFrom,
-        to: email,
-        subject: `[LMS by Umar] Confidential OTP Code: ${otpCode}`,
-        html: htmlContent,
-      });
-
-      console.log(`[MASTER OTP SMTP DISPATCH SUCCESS] Emailed OTP code to ${email}. MessageID: ${info.messageId}`);
-      return true;
-    } else {
-      console.log(`[MASTER OWNER OTP SMTP CONFIG MISSING] SMTP_USER or SMTP_PASS not set. Using console fallback & emergency bypass.`);
-      return false;
-    }
-  } catch (err: any) {
-    console.error(`[MASTER OTP SMTP DISPATCH ERROR / NETWORK WARNING]:`, {
-      message: err.message,
-      code: err.code,
-      command: err.command,
-      response: err.response
-    });
-    return false;
-  }
+  const res = await sendEmail({
+    to: email,
+    subject: `Confidential OTP Verification Code: ${otpCode}`,
+    html: htmlContent
+  });
+  return res.success;
 }
 
 // Helper: Calculate or Recalculate Payroll for a Worker in a given Month (YYYY-MM)
@@ -2133,35 +2159,18 @@ System Administration • LMS by Umar`;
     </html>
     `;
 
-    const smtpUser = process.env.SMTP_USER;
-    const smtpFrom = process.env.SMTP_FROM || `LMS by Umar <${smtpUser || 'umarchoudhary259@gmail.com'}>`;
-
-    let emailSent = false;
-    let message = 'Automated password reset logged & simulated successfully.';
-
-    try {
-      const transporter = createSmtpTransporter();
-      if (transporter) {
-        await transporter.sendMail({
-          from: smtpFrom,
-          to: normalizedEmail,
-          subject: '[LMS by Umar] Password Reset Link',
-          html: htmlContent
-        });
-        emailSent = true;
-        message = '✉️ Password reset email has been successfully dispatched to ' + normalizedEmail + ' via SMTP.';
-      } else {
-        console.log('[SIMULATED PASSWORD RESET DISPATCH] Email: ' + normalizedEmail + ', URL: ' + resetUrl);
-      }
-    } catch (err: any) {
-      console.error('[SMTP Password Reset Error / Non-blocking] ' + err.message);
-      message = '✉️ Simulated Dispatch: Link is ready. Notice: ' + err.message;
-    }
+    const emailRes = await sendEmail({
+      to: normalizedEmail,
+      subject: '[LMS by Umar] Password Reset Link',
+      html: htmlContent
+    });
 
     return res.status(200).json({
       success: true,
-      message,
-      emailSent,
+      message: emailRes.success
+        ? `✉️ Password reset email has been successfully dispatched to ${normalizedEmail} via ${emailRes.method}.`
+        : `⚠️ Could not dispatch reset email: ${emailRes.error || 'Unknown error'}.`,
+      emailSent: emailRes.success,
       resetUrl
     });
   });
@@ -2184,7 +2193,9 @@ System Administration • LMS by Umar`;
 
     return res.status(200).json({
       success: true,
-      message: '🎉 Your password has been successfully reset! You can now log in using your email and new password.'
+      message: '🎉 Your password has been successfully reset! You can now log in using your email and new password.',
+      role: targetUser.role,
+      companyId: targetUser.companyId
     });
   });
 

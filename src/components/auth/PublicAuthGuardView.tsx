@@ -493,13 +493,19 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
     try {
       const res = await resetPasswordApi(resetPasswordToken, newPassword);
       if (res.success) {
-        setSuccessMessage('🎉 Password reset successful! You can now log in using your new credentials.');
+        setSuccessMessage('🎉 Password reset successful! Redirecting you to your company login portal...');
         setNewPassword('');
         setConfirmNewPassword('');
         setResetPasswordToken(null);
         setTimeout(() => {
-          setActiveTab('adminLogin');
-          window.history.replaceState({}, document.title, window.location.pathname);
+          const companyParam = res.companyId ? `?company=${res.companyId}` : '';
+          if (res.role === 'Labor') {
+            window.location.href = `/login/worker${companyParam}`;
+          } else if (res.role === 'Owner') {
+            window.location.href = `/master-login`;
+          } else {
+            window.location.href = `/login/admin${companyParam}`;
+          }
         }, 3000);
       } else {
         setErrorMessage(res.message || 'Failed to reset password.');
