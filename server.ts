@@ -33,11 +33,16 @@ import { CloudinaryStorage } from 'multer-storage-cloudinary';
 // 1. lms_worker_photos - Worker profile pictures and avatars
 // 2. lms_document_vault - Iqama PDFs, Passport scans, Contracts & Policies
 // =========================================================================
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'lms-saudi',
-  api_key: process.env.CLOUDINARY_API_KEY || '123456789012345',
-  api_secret: process.env.CLOUDINARY_API_SECRET || 'lms_secret_key_cloud'
-});
+try {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'lms-saudi',
+    api_key: process.env.CLOUDINARY_API_KEY || '123456789012345',
+    api_secret: process.env.CLOUDINARY_API_SECRET || 'lms_secret_key_cloud'
+  });
+  console.log('[CLOUDINARY INITIALIZATION] Safe configuration processed.');
+} catch (cloudinaryConfigErr: any) {
+  console.warn('[CLOUDINARY INITIALIZATION ERROR] Safely caught error during boot config:', cloudinaryConfigErr.message);
+}
 
 const isCloudinaryActive = Boolean(
   process.env.CLOUDINARY_CLOUD_NAME &&
@@ -341,11 +346,15 @@ const resendApiKey = process.env.RESEND_API_KEY?.trim();
 const fromEmail = process.env.FROM_EMAIL || 'onboarding@resend.dev';
 
 let resendClient: Resend | null = null;
-if (resendApiKey && !resendApiKey.includes('your_api_key') && !resendApiKey.includes('re_your_api_key')) {
-  resendClient = new Resend(resendApiKey);
-  console.log(`[RESEND ENGINE INITIALIZED] API Key configured successfully. Sender: ${fromEmail}`);
-} else {
-  console.log('[RESEND ENGINE WARNING] RESEND_API_KEY is not defined or is placeholder. Falling back to SMTP Transporter or Simulated Logging.');
+try {
+  if (resendApiKey && !resendApiKey.includes('your_api_key') && !resendApiKey.includes('re_your_api_key')) {
+    resendClient = new Resend(resendApiKey);
+    console.log(`[RESEND ENGINE INITIALIZED] API Key configured successfully. Sender: ${fromEmail}`);
+  } else {
+    console.log('[RESEND ENGINE WARNING] RESEND_API_KEY is not defined or is placeholder. Falling back to SMTP Transporter or Simulated Logging.');
+  }
+} catch (resendInitErr: any) {
+  console.warn('[RESEND ENGINE INITIALIZATION ERROR] Safely caught error during Resend initialization:', resendInitErr.message);
 }
 
 export async function sendEmail(params: {
@@ -3186,3 +3195,9 @@ System Administration • LMS by Umar`;
 }
 
 startServer();
+
+// =========================================================================
+// GIT COMMIT FORCE & BUILD SYNC TIMESTAMP
+// Updated At: 2026-07-30T06:28:00-07:00
+// Unified Email Notification System + Cloudinary Document Vault Installed
+// =========================================================================
