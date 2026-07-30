@@ -25,7 +25,6 @@ import {
 
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
-import { CloudinaryStorage } from 'multer-storage-cloudinary';
 
 // =========================================================================
 // CLOUDINARY FILE STORAGE & MULTER INTEGRATION
@@ -51,34 +50,47 @@ const isCloudinaryActive = Boolean(
   !process.env.CLOUDINARY_CLOUD_NAME.includes('your_cloud_name')
 );
 
-const workerPhotosCloudinaryStorage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: async (req, file) => ({
-    folder: 'lms_worker_photos',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
-    public_id: `worker_photo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
-  })
-});
-
-const documentVaultCloudinaryStorage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: async (req, file) => ({
-    folder: 'lms_document_vault',
-    allowed_formats: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'webp'],
-    resource_type: 'auto',
-    public_id: `doc_vault_${Date.now()}_${file.originalname.replace(/[^a-zA-Z0-9]/g, '_')}`
-  })
-});
-
+// Standard memory storage to capture the file buffer cleanly
 const uploadWorkerPhoto = multer({
-  storage: isCloudinaryActive ? workerPhotosCloudinaryStorage : multer.memoryStorage(),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
 const uploadDocumentVault = multer({
-  storage: isCloudinaryActive ? documentVaultCloudinaryStorage : multer.memoryStorage(),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 }
 });
+
+// Reusable helper for streaming upload directly to Cloudinary
+export async function uploadToCloudinary(
+  fileBuffer: Buffer,
+  folder: string,
+  options: any = {}
+): Promise<{ secure_url: string; public_id: string }> {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder,
+        ...options
+      },
+      (error, result) => {
+        if (error) {
+          console.error('[CLOUDINARY DIRECT STREAM UPLOAD ERROR]:', error);
+          return reject(error);
+        }
+        if (!result) {
+          return reject(new Error('No upload result returned from Cloudinary.'));
+        }
+        resolve({
+          secure_url: result.secure_url,
+          public_id: result.public_id
+        });
+      }
+    );
+    uploadStream.end(fileBuffer);
+  });
+}
+
 
 // =========================================================================
 // PERMANENT DATABASE & ORM SCHEMA PERSISTENCE CONFIGURATION
@@ -2979,14 +2991,29 @@ System Administration • LMS by Umar`;
   // CLOUDINARY FILE UPLOADS & DOCUMENT VAULT API ENDPOINTS
   // Folders: lms_worker_photos & lms_document_vault
   // =========================================================================
-  app.post('/api/upload/worker-photo', uploadWorkerPhoto.single('photo'), (req: AuthenticatedRequest, res) => {
+  app.post('/api/upload/worker-photo', uploadWorkerPhoto.single('photo'), async (req: AuthenticatedRequest, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: 'No photo file provided in request body.' });
       }
 
-      const secureUrl = (req.file as any).path || (req.file as any).secure_url || `data:${req.file.mimetype};base64,${req.file.buffer?.toString('base64')}`;
-      const publicId = (req.file as any).filename || `worker_photo_${Date.now()}`;
+      let secureUrl = '';
+      let publicId = `worker_photo_${Date.now()}`;
+
+      if (isCloudinaryActive) {
+        try {
+          const uploadRes = await uploadToCloudinary(req.file.buffer, 'lms_worker_photos', {
+            public_id: `worker_photo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
+          });
+          secureUrl = uploadRes.secure_url;
+          publicId = uploadRes.public_id;
+        } catch (uploadErr: any) {
+          console.error('[CLOUDINARY PHOTO STREAM UPLOAD FAILED, FALLING BACK TO BASE64]:', uploadErr.message);
+          secureUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+        }
+      } else {
+        secureUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      }
 
       return res.json({
         success: true,
@@ -3001,13 +3028,31 @@ System Administration • LMS by Umar`;
     }
   });
 
-  app.post('/api/upload/document', uploadDocumentVault.single('document'), (req: AuthenticatedRequest, res) => {
+  app.post('/api/upload/document', uploadDocumentVault.single('document'), async (req: AuthenticatedRequest, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: 'No document file provided in request body.' });
       }
 
-      const secureUrl = (req.file as any).path || (req.file as any).secure_url || `data:${req.file.mimetype};base64,${req.file.buffer?.toString('base64')}`;
+      let secureUrl = '';
+      const cleanOriginalName = req.file.originalname.replace(/[^a-zA-Z0-9]/g, '_');
+      const publicId = `doc_vault_${Date.now()}_${cleanOriginalName}`;
+
+      if (isCloudinaryActive) {
+        try {
+          const uploadRes = await uploadToCloudinary(req.file.buffer, 'lms_document_vault', {
+            public_id: publicId,
+            resource_type: 'auto'
+          });
+          secureUrl = uploadRes.secure_url;
+        } catch (uploadErr: any) {
+          console.error('[CLOUDINARY DOCUMENT STREAM UPLOAD FAILED, FALLING BACK TO BASE64]:', uploadErr.message);
+          secureUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+        }
+      } else {
+        secureUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      }
+
       const fileSizeMb = (req.file.size / (1024 * 1024)).toFixed(2);
       const formattedSize = `${fileSizeMb} MB`;
 
