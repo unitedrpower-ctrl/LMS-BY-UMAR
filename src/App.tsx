@@ -496,6 +496,7 @@ export default function App() {
           <SitesView
             sites={sites}
             users={users}
+            attendance={attendance}
             onSaveSite={handleSaveSite}
             currentUserRole={currentUser.role}
           />

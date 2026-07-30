@@ -1,5 +1,6 @@
 import React from 'react';
 import { User, Site, Attendance, Payroll, Complaint, Notice } from '../../types';
+import { getIqamaExpiryStatus } from '../../utils/iqamaUtils';
 import { 
   Building2, 
   Users, 
@@ -240,6 +241,126 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               SAR {totalMonthlyPayout.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <span className="text-[11px] text-slate-500">Current month payout</span>
+          </div>
+        </div>
+      )}
+
+      {/* IQAMA EXPIRY ALERTS WARNING PANEL (Requirement: 15-day / 10-day renewal tracker) */}
+      {currentUser.role !== 'Labor' && (
+        <div className="bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-amber-500/10 border-2 border-amber-300 rounded-2xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-sm">
+                <AlertTriangle className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-black text-slate-900 tracking-tight">
+                    Worker Iqama Expiry Tracker & Sponsor Alert Center
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white font-black text-[10px] uppercase tracking-wider">
+                    {users.filter(u => {
+                      const st = getIqamaExpiryStatus(u.iqamaExpiry);
+                      return st.status === 'EXPIRED' || st.status === 'URGENT' || st.status === 'WARNING';
+                    }).length} Action Required
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 font-medium">
+                  Automatically flags worker residence permits expiring in 15 days or less so HR can initiate renewal with third-party sponsors / Kafeel.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setActiveTab('users')}
+              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs inline-flex items-center gap-1.5 shadow-xs"
+            >
+              <Users className="w-4 h-4 text-amber-400" />
+              Manage All Workers & Kafeel
+            </button>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-900 text-slate-200 font-bold uppercase text-[10px] tracking-wider">
+                  <tr>
+                    <th className="p-3">Worker Name</th>
+                    <th className="p-3">Iqama ID</th>
+                    <th className="p-3">Sponsor / Kafeel Agency</th>
+                    <th className="p-3">Expiry Date</th>
+                    <th className="p-3">Status & Warning Level</th>
+                    <th className="p-3 text-right">Sponsor Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {users
+                    .filter(u => u.iqamaExpiry || u.sponsorName)
+                    .map(u => {
+                      const statusInfo = getIqamaExpiryStatus(u.iqamaExpiry);
+                      const isAlert = statusInfo.status === 'EXPIRED' || statusInfo.status === 'URGENT' || statusInfo.status === 'WARNING';
+                      return { user: u, statusInfo, isAlert };
+                    })
+                    .sort((a, b) => (a.statusInfo.daysLeft ?? 999) - (b.statusInfo.daysLeft ?? 999))
+                    .slice(0, 5)
+                    .map(({ user: u, statusInfo, isAlert }) => (
+                      <tr 
+                        key={u.id}
+                        className={`hover:bg-slate-50 transition-colors ${
+                          statusInfo.status === 'EXPIRED' 
+                            ? 'bg-rose-50/90' 
+                            : statusInfo.status === 'URGENT'
+                            ? 'bg-rose-50/50'
+                            : statusInfo.status === 'WARNING'
+                            ? 'bg-amber-50/60'
+                            : ''
+                        }`}
+                      >
+                        <td className="p-3 font-bold text-slate-900 flex items-center gap-2">
+                          <img 
+                            src={u.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'} 
+                            alt={u.name} 
+                            className="w-7 h-7 rounded-full object-cover border border-slate-300"
+                          />
+                          <div>
+                            <div>{u.name}</div>
+                            <span className="text-[10px] text-slate-500 font-normal">{u.designation || u.role}</span>
+                          </div>
+                        </td>
+                        <td className="p-3 font-mono font-bold text-slate-800">{u.iqamaId || 'N/A'}</td>
+                        <td className="p-3 text-slate-700">
+                          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-semibold text-[11px] border border-slate-200">
+                            {u.sponsorName || 'Direct Hire'}
+                          </span>
+                        </td>
+                        <td className="p-3 font-mono text-slate-800 font-semibold">
+                          {u.iqamaExpiry || 'Not specified'}
+                        </td>
+                        <td className="p-3">
+                          <span className={`px-2.5 py-1 rounded-md text-[10px] ${statusInfo.badgeClass}`}>
+                            {statusInfo.label}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right">
+                          <button
+                            onClick={() => {
+                              alert(`📩 Renewal notice sent to sponsor "${u.sponsorName || 'Agency'}" for worker ${u.name} (Iqama ID: ${u.iqamaId}).`);
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 transition-all ${
+                              isAlert 
+                                ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-xs' 
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                            }`}
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            Initiate Kafeel Renewal
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

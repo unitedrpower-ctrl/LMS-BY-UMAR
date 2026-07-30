@@ -66,6 +66,8 @@ export interface User {
   joinedDate: string;
   // Labor Registration & Credentials & Bank Account
   iqamaId?: string;
+  iqamaExpiry?: string; // YYYY-MM-DD
+  sponsorName?: string; // Kafeel / Third-party Agency Name
   passportNumber?: string;
   loginSerial?: string;
   loginPassword?: string;

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole, Site, RoleInvitation } from '../../types';
+import { getIqamaExpiryStatus } from '../../utils/iqamaUtils';
 import { 
   Users, 
   Plus, 
@@ -518,6 +519,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
                 <th className="p-3.5">Status</th>
                 <th className="p-3.5">Role</th>
                 <th className="p-3.5">Assigned Site</th>
+                <th className="p-3.5">Iqama & Sponsor / Kafeel</th>
                 <th className="p-3.5">Daily Wage Rate</th>
                 <th className="p-3.5">Bank Account Info</th>
                 <th className="p-3.5 text-right">Actions</th>
@@ -572,6 +574,28 @@ export const UsersView: React.FC<UsersViewProps> = ({
 
                     <td className="p-3.5 text-slate-700">
                       {site ? site.name : 'Corporate Headquarters'}
+                    </td>
+
+                    <td className="p-3.5 text-slate-700 text-xs">
+                      {u.iqamaId || u.iqamaExpiry || u.sponsorName ? (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-mono font-bold text-slate-900">{u.iqamaId || 'No ID'}</span>
+                            {u.iqamaExpiry && (
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] ${getIqamaExpiryStatus(u.iqamaExpiry).badgeClass}`}>
+                                {getIqamaExpiryStatus(u.iqamaExpiry).label}
+                              </span>
+                            )}
+                          </div>
+                          {u.sponsorName && (
+                            <div className="text-[10px] text-slate-500 font-medium">
+                              <span className="text-slate-400">Kafeel/Sponsor:</span> {u.sponsorName}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 italic text-[11px]">Not specified</span>
+                      )}
                     </td>
 
                     <td className="p-3.5 font-bold text-slate-900">SAR {u.dailyRate.toFixed(2)}/day</td>
@@ -675,6 +699,29 @@ export const UsersView: React.FC<UsersViewProps> = ({
                     placeholder="e.g. 2549102938"
                     value={editingUser.iqamaId || ''}
                     onChange={(e) => setEditingUser({ ...editingUser, iqamaId: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Iqama Expiry Date *</label>
+                  <input
+                    type="date"
+                    value={editingUser.iqamaExpiry || ''}
+                    onChange={(e) => setEditingUser({ ...editingUser, iqamaExpiry: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Sponsor Name / Kafeel *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Al-Bawardi Manpower Agency"
+                    value={editingUser.sponsorName || ''}
+                    onChange={(e) => setEditingUser({ ...editingUser, sponsorName: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl"
                   />
                 </div>

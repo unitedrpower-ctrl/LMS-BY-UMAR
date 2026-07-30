@@ -292,6 +292,8 @@ export const INITIAL_USERS: User[] = [
     joinedDate: '2025-01-10',
     avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
     iqamaId: '2549102938',
+    iqamaExpiry: '2026-08-08', // Expiring in ~9 days (Urgent Warning)
+    sponsorName: 'Al-Bawardi Manpower Agency',
     passportNumber: 'E9102837',
     loginSerial: 'EMP-1001',
     loginPassword: 'WorkerPass#1'
@@ -308,6 +310,8 @@ export const INITIAL_USERS: User[] = [
     joinedDate: '2025-02-14',
     avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80',
     iqamaId: '2619028371',
+    iqamaExpiry: '2026-08-13', // Expiring in ~14 days (Warning)
+    sponsorName: 'Saudi Global Contracting Kafeel',
     passportNumber: 'F8192039',
     loginSerial: 'EMP-1002',
     loginPassword: 'WorkerPass#2'
@@ -324,6 +328,8 @@ export const INITIAL_USERS: User[] = [
     joinedDate: '2025-03-05',
     avatar: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80',
     iqamaId: '2719028341',
+    iqamaExpiry: '2026-07-20', // Expired! (Critical Red)
+    sponsorName: 'Al-Bawardi Manpower Agency',
     passportNumber: 'G9102938',
     loginSerial: 'EMP-1003',
     loginPassword: 'WorkerPass#3'
@@ -340,6 +346,8 @@ export const INITIAL_USERS: User[] = [
     joinedDate: '2025-04-12',
     avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
     iqamaId: '2819028351',
+    iqamaExpiry: '2026-11-20', // Valid long term
+    sponsorName: 'Desert Oasis Services Kafeel',
     passportNumber: 'H1029384',
     loginSerial: 'EMP-1004',
     loginPassword: 'WorkerPass#4'
@@ -356,6 +364,8 @@ export const INITIAL_USERS: User[] = [
     joinedDate: '2025-05-01',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
     iqamaId: '2910293841',
+    iqamaExpiry: '2026-08-11', // Expiring in ~12 days
+    sponsorName: 'Al-Bawardi Manpower Agency',
     passportNumber: 'I9102837',
     loginSerial: 'EMP-1005',
     loginPassword: 'WorkerPass#5',
