@@ -300,10 +300,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <div className="text-center space-y-1">
           <div className="w-14 h-14 bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center mx-auto shadow-lg border border-amber-500/40">
             <img 
-              src="/lms_umar_logo_1785237060471.jpg" 
+              src="/lms_by_umar_icon.jpg" 
               alt="LMS by Umar" 
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = '/logo.jpg';
+              }}
             />
           </div>
           <h2 className="text-xl font-extrabold text-white tracking-tight pt-1">LMS by Umar Authentication</h2>

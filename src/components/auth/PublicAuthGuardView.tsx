@@ -685,10 +685,13 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
         <div className="text-center space-y-2">
           <div className="w-16 h-16 bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center mx-auto shadow-xl border-2 border-amber-500/40">
             <img 
-              src="/lms_umar_logo_1785237060471.jpg" 
+              src="/lms_by_umar_icon.jpg" 
               alt="LMS by Umar Logo" 
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = '/logo.jpg';
+              }}
             />
           </div>
           <div>

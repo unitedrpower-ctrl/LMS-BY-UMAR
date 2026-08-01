@@ -137,12 +137,15 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
           {/* App Logo & Prominent Name */}
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-slate-950 overflow-hidden flex items-center justify-center shadow-md flex-shrink-0 border border-amber-500/30">
+            <div className="w-10 h-10 rounded-xl bg-slate-950 overflow-hidden flex items-center justify-center shadow-md flex-shrink-0 border border-amber-500/40">
               <img 
-                src="/lms_umar_logo_1785237060471.jpg" 
+                src="/lms_by_umar_icon.jpg" 
                 alt="LMS by Umar Logo" 
-                className="h-10 w-auto object-contain max-h-12 w-full h-full object-cover"
+                className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = '/logo.jpg';
+                }}
               />
             </div>
             <div className="min-w-0">
