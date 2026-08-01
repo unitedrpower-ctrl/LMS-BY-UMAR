@@ -29,12 +29,15 @@ import { SubscriptionExpiredGuard } from './components/SubscriptionExpiredGuard'
 import { AuthModal } from './components/auth/AuthModal';
 import { PublicAuthGuardView } from './components/auth/PublicAuthGuardView';
 import { CompleteProfileModal } from './components/CompleteProfileModal';
+import { ForcePasswordChangeModal } from './components/auth/ForcePasswordChangeModal';
 import { 
   deleteUserApi, 
   updateUserPasswordApi, 
   saveUserApi, 
   getUsersApi, 
   getSitesApi, 
+  saveSiteApi,
+  deleteSiteApi,
   getAttendanceApi, 
   getPayrollApi, 
   getComplaintsApi, 
@@ -301,7 +304,7 @@ export default function App() {
     }
   };
 
-  const handleSaveSite = (newSite: Site) => {
+  const handleSaveSite = async (newSite: Site) => {
     setSites((prev) => {
       const idx = prev.findIndex((s) => s.id === newSite.id);
       if (idx >= 0) {
@@ -311,6 +314,15 @@ export default function App() {
       }
       return [...prev, newSite];
     });
+
+    try {
+      const saved = await saveSiteApi(newSite, currentUser || undefined);
+      if (saved && saved.id) {
+        setSites((prev) => prev.map((s) => (s.id === saved.id ? saved : s)));
+      }
+    } catch (err: any) {
+      console.warn('[Save Site API Exception]:', err.message);
+    }
   };
 
   const handleSaveAttendanceRecords = (records: Attendance[]) => {
@@ -762,6 +774,18 @@ export default function App() {
           currentUser={currentUser}
           onProfileSaved={(updatedUser) => {
             setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+          }}
+        />
+      )}
+
+      {/* Force Password Change Modal for First-Time Admin Logins */}
+      {currentUser && currentUser.mustChangePassword === true && currentUser.role !== 'Labor' && currentUser.role !== 'Owner' && (
+        <ForcePasswordChangeModal
+          currentUser={currentUser}
+          onPasswordChanged={(updatedUser) => {
+            setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+            saveToStorage(STORAGE_KEYS.CURRENT_USER_ID, updatedUser.id);
+            localStorage.setItem('lms_current_user_id', updatedUser.id);
           }}
         />
       )}

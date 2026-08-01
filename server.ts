@@ -316,6 +316,31 @@ export function getAppBaseUrl(req?: Request): string {
   return 'https://lms-by-umar.onrender.com';
 }
 
+// 24/7 Keep-Alive Self-Ping Engine (Prevents Render / Cloud Run cold-starts)
+function initializeKeepAlivePingEngine() {
+  const PING_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+
+  setInterval(async () => {
+    try {
+      const baseUrl = getAppBaseUrl();
+      const targetPingUrl = baseUrl ? `${baseUrl}/api/health` : 'http://localhost:3000/api/health';
+      
+      const response = await fetch(targetPingUrl, {
+        headers: { 'User-Agent': 'LMS-SaaS-KeepAlive-PingEngine/1.0' }
+      });
+      if (response.ok) {
+        console.log(`[KEEP-ALIVE ENGINE]: 24/7 Self-ping pinged ${targetPingUrl} successfully at ${new Date().toISOString()}`);
+      }
+    } catch (err: any) {
+      console.warn(`[KEEP-ALIVE ENGINE]: Self-ping notice: ${err.message}`);
+    }
+  }, PING_INTERVAL_MS);
+
+  console.log('🚀 [KEEP-ALIVE ENGINE]: 24/7 Render Keep-Alive Self-Ping Engine active (10m interval).');
+}
+
+initializeKeepAlivePingEngine();
+
 // =========================================================================
 // PURE BREVO HTTP REST API EMAIL DISPATCHER (PORT 443 ZERO TIMEOUT ON RENDER)
 // =========================================================================
@@ -973,6 +998,7 @@ async function startServer() {
         status: 'Active',
         isGoogleUser: false,
         profileCompleted: true,
+        mustChangePassword: true,
         loginPassword: initialPassword,
         loginSerial: adminEmail.toLowerCase().trim(),
         adminPermissions: {
@@ -990,6 +1016,7 @@ async function startServer() {
       existingAdmin.companyId = compId;
       existingAdmin.role = 'Super Admin';
       existingAdmin.status = 'Active';
+      existingAdmin.mustChangePassword = true;
       existingAdmin.loginPassword = initialPassword;
       existingAdmin.loginSerial = adminEmail.toLowerCase().trim();
     }
@@ -1483,7 +1510,8 @@ Platform Administration • LMS by Umar`;
     ) : null;
 
     if (matchingInv) {
-      matchingInv.status = 'Accepted';
+      matchingInv.status = 'Used';
+      (matchingInv as any).isUsed = true;
       matchingInv.acceptedAt = new Date().toISOString().replace('T', ' ').substring(0, 16);
 
       const assignedCompanyId = matchingInv.companyId || 'comp-001';
@@ -1507,6 +1535,20 @@ Platform Administration • LMS by Umar`;
       }
     }
 
+    if (inviteToken) {
+      roleInvitations.forEach(i => {
+        if (i.token === inviteToken) {
+          i.status = 'Used';
+          (i as any).isUsed = true;
+        }
+      });
+    }
+
+    // Set mustChangePassword flag for newly registered tenant admins
+    if (userData.role === 'Super Admin' || userData.role === 'HR Admin' || userData.role === 'Site Supervisor') {
+      userData.mustChangePassword = true;
+    }
+
     // Check if user already exists
     const existingIndex = users.findIndex(u => u.email.toLowerCase() === userData.email.toLowerCase());
     if (existingIndex >= 0) {
@@ -1516,6 +1558,11 @@ Platform Administration • LMS by Umar`;
       existing.role = userData.role || existing.role;
       existing.status = 'Active';
       existing.profileCompleted = true;
+      if (existing.role === 'Super Admin' || existing.role === 'HR Admin' || existing.role === 'Site Supervisor') {
+        if (existing.mustChangePassword === undefined) {
+          existing.mustChangePassword = true;
+        }
+      }
       if (userData.name) existing.name = userData.name;
       if (userData.loginPassword) {
         existing.loginPassword = userData.loginPassword;
@@ -1523,6 +1570,7 @@ Platform Administration • LMS by Umar`;
       if (matchingInv) {
         matchingInv.acceptedUserId = existing.id;
       }
+      saveDatabaseStateToDisk();
       return res.status(200).json({ success: true, user: existing, message: `🎉 Workspace registration complete! Assigned '${existing.role}' access.` });
     }
 
@@ -1532,6 +1580,34 @@ Platform Administration • LMS by Umar`;
     }
     saveDatabaseStateToDisk();
     return res.status(201).json({ success: true, user: userData, message: `🎉 Workspace registration complete! Assigned '${userData.role}' access.` });
+  });
+
+  // Force Password Change Endpoint for First-Time Admin Logins
+  app.post('/api/auth/force-change-password', (req, res) => {
+    const { userId, email, newPassword } = req.body || {};
+    if (!newPassword || newPassword.trim().length < 4) {
+      return res.status(400).json({ error: 'New Password must be at least 4 characters long.' });
+    }
+
+    const cleanEmail = email ? email.toLowerCase().trim() : '';
+    const user = users.find(u => 
+      (userId && u.id === userId) || 
+      (cleanEmail && u.email.toLowerCase().trim() === cleanEmail)
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: 'User account not found.' });
+    }
+
+    user.loginPassword = newPassword.trim();
+    user.mustChangePassword = false;
+    saveDatabaseStateToDisk();
+
+    return res.json({
+      success: true,
+      user,
+      message: '🎉 Password updated successfully! Your account is now fully secured.'
+    });
   });
 
   // Exact Company-Scoped Worker Authentication Endpoint
@@ -1724,8 +1800,8 @@ System Administration • LMS by Umar`;
   });
 
   // Robust Token Verification endpoint supporting both paths and query params
-  app.get('/api/invitation/verify', (req, res) => {
-    const token = (req.query.token as string || req.query.inviteToken as string || '').trim();
+  const handleVerifyToken = (req: any, res: any) => {
+    const token = (req.query.token as string || req.query.inviteToken as string || req.params?.token || '').trim();
     const companyId = (req.query.company as string || req.query.companyId as string || '').trim();
 
     if (!token) {
@@ -1734,6 +1810,12 @@ System Administration • LMS by Umar`;
 
     // 1. Find in roleInvitations
     let inv = roleInvitations.find(i => i.token === token || i.id === token);
+
+    if (inv) {
+      if (inv.status === 'Used' || inv.status === 'Accepted' || inv.status === 'Revoked' || (inv as any).isUsed) {
+        return res.status(400).json({ valid: false, error: 'This invitation link has already been used or expired. Please contact your administrator for a new invitation.' });
+      }
+    }
 
     // 2. Fallback: Find in company record
     if (!inv) {
@@ -1744,6 +1826,9 @@ System Administration • LMS by Umar`;
         (companyId && (c.id === companyId || c.id.toLowerCase() === companyId.toLowerCase()))
       );
       if (comp) {
+        if ((comp as any).invitationTokenUsed) {
+          return res.status(400).json({ valid: false, error: 'This invitation link has already been used or expired. Please contact your administrator for a new invitation.' });
+        }
         inv = roleInvitations.find(i => i.companyId === comp.id && i.email.toLowerCase() === comp.adminEmail.toLowerCase());
         if (!inv) {
           inv = {
@@ -1758,6 +1843,8 @@ System Administration • LMS by Umar`;
             status: 'Pending'
           };
           roleInvitations.push(inv);
+        } else if (inv.status === 'Used' || inv.status === 'Accepted' || (inv as any).isUsed) {
+          return res.status(400).json({ valid: false, error: 'This invitation link has already been used or expired. Please contact your administrator for a new invitation.' });
         }
       }
     }
@@ -1823,157 +1910,11 @@ System Administration • LMS by Umar`;
       email: inv.email,
       initialPassword: invitedUser?.loginPassword || 'LMS#Welcome2026'
     });
-  });
+  };
 
-  // Robust Token Verification endpoint supporting both paths and query params
-  app.get('/api/verify-invite', (req, res) => {
-    const token = (req.query.token as string || req.query.inviteToken as string || '').trim();
-    const companyId = (req.query.company as string || req.query.companyId as string || '').trim();
-
-    if (!token) {
-      return res.status(400).json({ valid: false, error: 'Invitation Error: Token is required.' });
-    }
-
-    // 1. Find in roleInvitations
-    let inv = roleInvitations.find(i => i.token === token || i.id === token);
-
-    // 2. Fallback: Find in company record
-    if (!inv) {
-      const comp = companies.find(c => 
-        (c.invitationToken && c.invitationToken === token) || 
-        c.id === token || 
-        token.includes(c.id) ||
-        (companyId && (c.id === companyId || c.id.toLowerCase() === companyId.toLowerCase()))
-      );
-      if (comp) {
-        inv = roleInvitations.find(i => i.companyId === comp.id && i.email.toLowerCase() === comp.adminEmail.toLowerCase());
-        if (!inv) {
-          inv = {
-            id: `inv-auto-${comp.id}`,
-            companyId: comp.id,
-            email: comp.adminEmail,
-            role: 'Super Admin',
-            token: comp.invitationToken || token,
-            invitedBy: 'Platform Owner',
-            createdAt: comp.createdAt || new Date().toISOString(),
-            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            status: 'Pending'
-          };
-          roleInvitations.push(inv);
-        }
-      }
-    }
-
-    if (!inv && token && companyId) {
-      // 3. Dev Server Restart Fallback: If memory was wiped but they have a valid token + companyId from email
-      inv = {
-        id: `inv-recovered-${Date.now()}`,
-        companyId: companyId,
-        email: `admin@${companyId}.com`, // Fallback email
-        role: 'Super Admin',
-        token: token,
-        invitedBy: 'Platform Owner',
-        createdAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        status: 'Pending'
-      };
-      roleInvitations.push(inv);
-    }
-
-    if (!inv) {
-      return res.status(404).json({ valid: false, error: 'Invitation Error: Invalid or non-existent invitation token.' });
-    }
-
-    if (companyId && inv.companyId !== companyId) {
-      // We skip the company existence check here if it was wiped from memory
-      if (companies.find(c => c.id === companyId) || companyId.startsWith('comp-')) {
-         // Allow
-      } else {
-        return res.status(400).json({ valid: false, error: 'Invitation Error: Company tenant mismatch.' });
-      }
-    }
-
-    if (inv.status !== 'Pending') {
-      return res.status(400).json({ valid: false, error: `This invitation has already been ${inv.status.toLowerCase()}.` });
-    }
-
-    let companyDetails = companies.find(c => c.id === inv!.companyId);
-    if (!companyDetails) {
-       companyDetails = {
-         id: inv.companyId,
-         name: `Recovered Company (${inv.companyId})`,
-         adminName: 'Tenant Admin',
-         adminEmail: inv.email,
-         crNumber: 'CR-000000',
-         planType: '1_YEAR',
-         subscriptionStartDate: new Date().toISOString().split('T')[0],
-         subscriptionEndDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-         maxLaborersAllowed: 100,
-         pricePaidSar: 0,
-         contactPhone: '+966 50 000 0000',
-         status: 'Active',
-         createdAt: new Date().toISOString()
-       };
-       companies.push(companyDetails);
-    }
-
-    const invitedUser = users.find(u => u.email.toLowerCase() === inv!.email.toLowerCase() && u.companyId === inv!.companyId);
-
-    return res.json({
-      valid: true,
-      invitation: inv,
-      company: companyDetails,
-      email: inv.email,
-      initialPassword: invitedUser?.loginPassword || ''
-    });
-  });
-
-  app.get('/api/invitations/validate/:token', (req, res) => {
-    const { token } = req.params;
-    const companyId = (req.query.company as string || req.query.companyId as string || '').trim();
-    
-    let inv = roleInvitations.find(i => i.token === token || i.id === token);
-
-    if (!inv) {
-      const comp = companies.find(c => 
-        (c.invitationToken && c.invitationToken === token) || 
-        c.id === token || 
-        token.includes(c.id) ||
-        (companyId && (c.id === companyId || c.id.toLowerCase() === companyId.toLowerCase()))
-      );
-      if (comp) {
-        inv = roleInvitations.find(i => i.companyId === comp.id && i.email.toLowerCase() === comp.adminEmail.toLowerCase());
-        if (!inv) {
-          inv = {
-            id: `inv-auto-${comp.id}`,
-            companyId: comp.id,
-            email: comp.adminEmail,
-            role: 'Super Admin',
-            token: comp.invitationToken || token,
-            invitedBy: 'Platform Owner',
-            createdAt: comp.createdAt || new Date().toISOString(),
-            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            status: 'Pending'
-          };
-          roleInvitations.push(inv);
-        }
-      }
-    }
-
-    if (!inv) {
-      return res.status(404).json({ valid: false, error: 'Invalid or non-existent invitation token.' });
-    }
-    if (inv.status !== 'Pending') {
-      return res.status(400).json({ valid: false, error: `This invitation has already been ${inv.status.toLowerCase()}.` });
-    }
-    const companyDetails = companies.find(c => c.id === inv.companyId);
-    res.json({
-      valid: true,
-      invitation: inv,
-      company: companyDetails,
-      email: inv.email
-    });
-  });
+  app.get('/api/invitation/verify', handleVerifyToken);
+  app.get('/api/verify-invite', handleVerifyToken);
+  app.get('/api/invitations/validate/:token', handleVerifyToken);
 
   // ---------------------------------------------------------
   // Master Owner Email OTP Authentication Endpoints

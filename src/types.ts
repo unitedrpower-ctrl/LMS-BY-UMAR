@@ -32,7 +32,8 @@ export interface RoleInvitation {
   invitedBy: string;
   createdAt: string;
   expiresAt: string;
-  status: 'Pending' | 'Accepted' | 'Expired' | 'Revoked';
+  status: 'Pending' | 'Accepted' | 'Expired' | 'Revoked' | 'Used';
+  isUsed?: boolean;
   acceptedAt?: string;
   acceptedUserId?: string;
 }
@@ -81,6 +82,7 @@ export interface User {
   registeredAt?: string;
   isGoogleUser?: boolean;
   profileCompleted?: boolean;
+  mustChangePassword?: boolean;
   // Granular Admin Permissions
   adminPermissions?: AdminPermissions;
 }

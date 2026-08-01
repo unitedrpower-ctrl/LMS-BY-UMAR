@@ -67,6 +67,12 @@ export async function saveSiteApi(site: Site, currentUser?: User): Promise<Site>
   }, currentUser);
 }
 
+export async function deleteSiteApi(siteId: string, currentUser?: User): Promise<{ success: boolean; message: string }> {
+  return fetchApi<{ success: boolean; message: string }>(`/api/sites/${siteId}`, {
+    method: 'DELETE'
+  }, currentUser);
+}
+
 // 4. Attendance (Triggers automated payroll recalculation in backend)
 export async function getAttendanceApi(currentUser?: User, siteId?: string, date?: string): Promise<Attendance[]> {
   let url = '/api/attendance?';
@@ -511,6 +517,17 @@ export async function resetPasswordApi(token: string, newPassword: string): Prom
     method: 'POST',
     body: JSON.stringify({ token, newPassword })
   });
+}
+
+export async function forceChangePasswordApi(params: { userId?: string; email?: string; newPassword: string }, currentUser?: User): Promise<{
+  success: boolean;
+  message: string;
+  user?: User;
+}> {
+  return fetchApi('/api/auth/force-change-password', {
+    method: 'POST',
+    body: JSON.stringify(params)
+  }, currentUser);
 }
 
 // ---------------------------------------------------------
