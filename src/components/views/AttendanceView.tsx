@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Attendance, Site, User, AttendanceStatus, Payroll } from '../../types';
+import { UserAvatar } from '../UserAvatar';
 import { 
   CalendarCheck, 
   Building2, 
@@ -1299,9 +1300,9 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                         className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
                       />
 
-                      <img
-                        src={lab.avatar || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150'}
-                        alt={lab.name}
+                      <UserAvatar
+                        src={lab.avatar}
+                        name={lab.name}
                         className="w-10 h-10 rounded-full object-cover border border-slate-200"
                       />
                       <div>

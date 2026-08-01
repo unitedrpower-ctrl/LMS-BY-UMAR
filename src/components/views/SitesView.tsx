@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Site, User, Attendance } from '../../types';
+import { UserAvatar } from '../UserAvatar';
 import { 
   Building2, 
   Plus, 
@@ -436,11 +437,10 @@ export const SitesView: React.FC<SitesViewProps> = ({
 
                   <div className="flex -space-x-2 overflow-hidden py-0.5">
                     {siteLaborers.slice(0, 5).map((lab) => (
-                      <img
+                      <UserAvatar
                         key={lab.id}
-                        src={lab.avatar || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150'}
-                        alt={lab.name}
-                        title={lab.name}
+                        src={lab.avatar}
+                        name={lab.name}
                         className="inline-block h-6 w-6 rounded-full ring-2 ring-white object-cover"
                       />
                     ))}
@@ -682,9 +682,9 @@ export const SitesView: React.FC<SitesViewProps> = ({
                         }`}
                       >
                         <div className="flex items-center gap-2">
-                          <img
-                            src={lab.avatar || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150'}
-                            alt={lab.name}
+                          <UserAvatar
+                            src={lab.avatar}
+                            name={lab.name}
                             className="w-6 h-6 rounded-full object-cover"
                           />
                           <div>

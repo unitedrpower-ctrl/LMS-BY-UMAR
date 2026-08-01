@@ -1,6 +1,7 @@
 import React from 'react';
 import { User, Site, Attendance, Payroll, Complaint, Notice } from '../../types';
 import { getIqamaExpiryStatus } from '../../utils/iqamaUtils';
+import { UserAvatar } from '../UserAvatar';
 import { 
   Building2, 
   Users, 
@@ -73,9 +74,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Welcome & Role Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 text-white shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <img
-            src={currentUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}
-            alt={currentUser.name}
+          <UserAvatar
+            src={currentUser.avatar}
+            name={currentUser.name}
             className="w-14 h-14 rounded-full border-2 border-indigo-400 object-cover flex-shrink-0"
           />
           <div>
@@ -317,9 +318,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         }`}
                       >
                         <td className="p-3 font-bold text-slate-900 flex items-center gap-2">
-                          <img 
-                            src={u.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'} 
-                            alt={u.name} 
+                          <UserAvatar 
+                            src={u.avatar} 
+                            name={u.name} 
                             className="w-7 h-7 rounded-full object-cover border border-slate-300"
                           />
                           <div>

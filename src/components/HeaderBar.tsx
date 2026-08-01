@@ -26,6 +26,7 @@ import {
 interface HeaderBarProps {
   currentUser: User;
   allUsers: User[];
+  tenantCompany?: any;
   onSelectUser: (userId: string) => void;
   isMobileFrame: boolean;
   onToggleMobileFrame: () => void;
@@ -43,6 +44,7 @@ interface HeaderBarProps {
 export const HeaderBar: React.FC<HeaderBarProps> = ({
   currentUser,
   allUsers,
+  tenantCompany,
   onSelectUser,
   isMobileFrame,
   onToggleMobileFrame,
@@ -158,6 +160,36 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               </p>
             </div>
           </div>
+
+          {/* Dynamic Company Branding Header Badge (Admin & Worker Portals) */}
+          {currentUser && (
+            <div className="hidden xs:flex items-center gap-1.5 ml-1 sm:ml-2 pl-2 sm:pl-3 border-l border-slate-800 shrink-0">
+              {currentUser.role === 'Labor' ? (
+                <div id="header-tenant-company-badge" className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-950/70 border border-emerald-500/40 rounded-xl text-emerald-300 font-extrabold text-xs shadow-inner">
+                  <Building2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span className="truncate max-w-[130px] sm:max-w-[200px] md:max-w-[280px]">
+                    <span className="text-emerald-400/80 font-normal text-[11px] hidden sm:inline">Working at: </span>
+                    <span className="text-white font-black">{tenantCompany?.name || (currentUser as any)?.companyName || currentUser.companyId || 'Assigned Company'}</span>
+                  </span>
+                </div>
+              ) : currentUser.role === 'Owner' ? (
+                <div id="header-tenant-company-badge" className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-950/70 border border-purple-500/40 rounded-xl text-purple-200 font-extrabold text-xs shadow-inner">
+                  <Building2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                  <span className="truncate max-w-[130px] sm:max-w-[200px] md:max-w-[280px]">
+                    <span className="text-white font-black">Platform Owner HQ</span>
+                  </span>
+                </div>
+              ) : (
+                <div id="header-tenant-company-badge" className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-950/70 border border-indigo-500/40 rounded-xl text-indigo-200 font-extrabold text-xs shadow-inner">
+                  <Building2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                  <span className="truncate max-w-[130px] sm:max-w-[200px] md:max-w-[280px]">
+                    <span className="text-indigo-300/80 font-normal text-[11px] hidden md:inline">Company: </span>
+                    <span className="text-white font-black">{tenantCompany?.name || (currentUser as any)?.companyName || currentUser.companyId || 'Registered Company'}</span>
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right Controls (Minimalist quick actions) */}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { UserAvatar } from '../UserAvatar';
 import { 
   Settings as SettingsIcon, 
   Calendar, 
@@ -404,9 +405,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <tr key={admin.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="p-3">
                       <div className="flex items-center gap-2">
-                        <img
-                          src={admin.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80&auto=format&fit=crop&q=80'}
-                          alt={admin.name}
+                        <UserAvatar
+                          src={admin.avatar}
+                          name={admin.name}
                           className="w-8 h-8 rounded-full object-cover border border-slate-200"
                         />
                         <div>
@@ -490,9 +491,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           {laborUsers.map(worker => (
             <div key={worker.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
               <div className="flex items-center gap-3 border-b border-slate-200 pb-2">
-                <img
-                  src={worker.avatar || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80'}
-                  alt={worker.name}
+                <UserAvatar
+                  src={worker.avatar}
+                  name={worker.name}
                   className="w-10 h-10 rounded-full object-cover border border-slate-300"
                 />
                 <div>

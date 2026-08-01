@@ -684,6 +684,7 @@ export default function App() {
             <HeaderBar
               currentUser={currentUser}
               allUsers={users}
+              tenantCompany={tenantCompany}
               onSelectUser={setCurrentUserId}
               isMobileFrame={isMobileFrame}
               onToggleMobileFrame={() => setIsMobileFrame(!isMobileFrame)}
@@ -733,6 +734,7 @@ export default function App() {
           <HeaderBar
             currentUser={currentUser}
             allUsers={users}
+            tenantCompany={tenantCompany}
             onSelectUser={setCurrentUserId}
             isMobileFrame={isMobileFrame}
             onToggleMobileFrame={() => setIsMobileFrame(!isMobileFrame)}

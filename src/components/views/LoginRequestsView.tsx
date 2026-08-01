@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User, UserRole, Site } from '../../types';
+import { UserAvatar } from '../UserAvatar';
 import { UserCheck, Clock, CheckCircle2, XCircle, ShieldCheck, Building2, Search, Mail, Phone, Hash, AlertCircle } from 'lucide-react';
 
 interface LoginRequestsViewProps {
@@ -170,9 +171,9 @@ export const LoginRequestsView: React.FC<LoginRequestsViewProps> = ({
                   isPending ? 'bg-amber-50/60 border-amber-100' : 'bg-slate-50 border-slate-100'
                 }`}>
                   <div className="flex items-center gap-3">
-                    <img
-                      src={user.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}
-                      alt={user.name}
+                    <UserAvatar
+                      src={user.avatar}
+                      name={user.name}
                       className="w-11 h-11 rounded-xl object-cover border-2 border-white shadow-sm"
                     />
                     <div>
@@ -272,9 +273,9 @@ export const LoginRequestsView: React.FC<LoginRequestsViewProps> = ({
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div className="flex items-center gap-3">
-                <img
-                  src={selectedUserForAction.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}
-                  alt={selectedUserForAction.name}
+                <UserAvatar
+                  src={selectedUserForAction.avatar}
+                  name={selectedUserForAction.name}
                   className="w-12 h-12 rounded-2xl object-cover border"
                 />
                 <div>

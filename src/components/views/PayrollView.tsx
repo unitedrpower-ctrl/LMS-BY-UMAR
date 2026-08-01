@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Payroll, User, Attendance, SystemSettings } from '../../types';
+import { UserAvatar } from '../UserAvatar';
 import { 
   DollarSign, 
   Calculator, 
@@ -610,9 +611,9 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                       </td>
 
                       <td className="p-3.5 font-bold text-slate-900 flex items-center gap-2.5">
-                        <img
-                          src={worker?.avatar || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150'}
-                          alt={worker?.name}
+                        <UserAvatar
+                          src={worker?.avatar}
+                          name={worker?.name}
                           className="w-8 h-8 rounded-full object-cover border border-slate-200"
                         />
                         <div>

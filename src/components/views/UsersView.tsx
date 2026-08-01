@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole, Site, RoleInvitation } from '../../types';
 import { getIqamaExpiryStatus } from '../../utils/iqamaUtils';
+import { UserAvatar } from '../UserAvatar';
 import { 
   Users, 
   Plus, 
@@ -422,9 +423,9 @@ export const UsersView: React.FC<UsersViewProps> = ({
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-2.5">
-                    <img
-                      src={pending.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}
-                      alt={pending.name}
+                    <UserAvatar
+                      src={pending.avatar}
+                      name={pending.name}
                       className="w-10 h-10 rounded-full object-cover border border-slate-300"
                     />
                     <div>
@@ -538,9 +539,9 @@ export const UsersView: React.FC<UsersViewProps> = ({
                 return (
                   <tr key={u.id} className={`hover:bg-slate-50/80 transition-colors ${isInactive ? 'opacity-70 bg-slate-50/50' : ''}`}>
                     <td className="p-3.5 font-bold text-slate-900 flex items-center gap-3">
-                      <img
-                        src={u.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}
-                        alt={u.name}
+                      <UserAvatar
+                        src={u.avatar}
+                        name={u.name}
                         className="w-10 h-10 rounded-full object-cover border-2 border-slate-200 flex-shrink-0"
                       />
                       <div>
