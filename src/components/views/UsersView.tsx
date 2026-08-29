@@ -133,9 +133,21 @@ export const UsersView: React.FC<UsersViewProps> = ({
     }
   };
 
-  const pendingUsers = users.filter((u) => u.status === 'Pending');
+  const isMasterOwnerUser = (u: User) => {
+    const email = (u.email || '').toLowerCase().trim();
+    return u.role === 'Owner' || email === 'umarchoudhary259@gmail.com' || email === 'unitedrpower@gmail.com';
+  };
+
+  const pendingUsers = users.filter((u) => {
+    if (currentUserRole !== 'Owner' && isMasterOwnerUser(u)) return false;
+    return u.status === 'Pending';
+  });
 
   const filteredUsers = users.filter((u) => {
+    // Hide global platform Owner identity from standard Tenant Admins
+    if (currentUserRole !== 'Owner' && isMasterOwnerUser(u)) {
+      return false;
+    }
     // Show active users in default table (or filter by role)
     const isNotPending = u.status !== 'Pending';
     const matchesSearch =

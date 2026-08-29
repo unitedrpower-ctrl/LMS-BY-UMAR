@@ -2501,7 +2501,35 @@ System Administration • LMS by Umar`;
       sites.push(siteData);
     }
 
+    saveDatabaseStateToDisk();
     res.json(siteData);
+  });
+
+  // Permanently Delete Site (Hard Delete)
+  app.delete('/api/sites/:id', (req: AuthenticatedRequest, res) => {
+    if (req.userRole !== 'Super Admin' && req.userRole !== 'Owner') {
+      return res.status(403).json({ error: 'Forbidden: Only Super Admin or Owner can delete sites.' });
+    }
+    const { id } = req.params;
+    const siteIdx = sites.findIndex(s => s.id === id);
+    if (siteIdx === -1) {
+      return res.status(404).json({ error: 'Site not found.' });
+    }
+    const targetSite = sites[siteIdx];
+    if (req.userRole !== 'Owner' && (targetSite.companyId || 'comp-001') !== req.companyId) {
+      return res.status(403).json({ error: 'Forbidden: Cannot delete site from a different organization.' });
+    }
+
+    sites.splice(siteIdx, 1);
+    // Unassign site from users
+    users.forEach(u => {
+      if (u.siteId === id) {
+        u.siteId = undefined;
+      }
+    });
+
+    saveDatabaseStateToDisk();
+    res.json({ success: true, message: `Site "${targetSite.name}" permanently deleted.` });
   });
 
   // 4. Attendance Endpoint & Automated Payroll Recalculation Engine
@@ -2694,10 +2722,56 @@ System Administration • LMS by Umar`;
     }
 
     const result = recalculateWorkerPayroll(userId, monthYear);
+    saveDatabaseStateToDisk();
     res.json({
       message: `Payroll dynamically computed for user ${userId} for month ${monthYear}`,
       payroll: result
     });
+  });
+
+  // Permanently Delete Attendance Record (Hard Delete)
+  app.delete('/api/attendance/:id', (req: AuthenticatedRequest, res) => {
+    if (req.userRole !== 'Super Admin' && req.userRole !== 'Owner' && req.userRole !== 'HR Admin' && req.userRole !== 'Site Supervisor') {
+      return res.status(403).json({ error: 'Forbidden: Insufficient permissions to delete attendance records.' });
+    }
+    const { id } = req.params;
+    const idx = attendanceRecords.findIndex(a => a.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Attendance record not found.' });
+    }
+    const att = attendanceRecords[idx];
+    const targetUser = users.find(u => u.id === att.userId);
+    if (req.userRole !== 'Owner' && targetUser && (targetUser.companyId || 'comp-001') !== req.companyId) {
+      return res.status(403).json({ error: 'Forbidden: Cannot delete attendance for another organization.' });
+    }
+
+    attendanceRecords.splice(idx, 1);
+    if (targetUser && att.date) {
+      recalculateWorkerPayroll(targetUser.id, att.date.substring(0, 7));
+    }
+    saveDatabaseStateToDisk();
+    res.json({ success: true, message: 'Attendance record permanently deleted.' });
+  });
+
+  // Permanently Delete Payroll Record (Hard Delete)
+  app.delete('/api/payroll/:id', (req: AuthenticatedRequest, res) => {
+    if (req.userRole !== 'Super Admin' && req.userRole !== 'Owner' && req.userRole !== 'HR Admin') {
+      return res.status(403).json({ error: 'Forbidden: Only Super Admin or HR Admin can delete payroll records.' });
+    }
+    const { id } = req.params;
+    const idx = payrolls.findIndex(p => p.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Payroll record not found.' });
+    }
+    const pRecord = payrolls[idx];
+    const targetUser = users.find(u => u.id === pRecord.userId);
+    if (req.userRole !== 'Owner' && targetUser && (targetUser.companyId || 'comp-001') !== req.companyId) {
+      return res.status(403).json({ error: 'Forbidden: Cannot delete payroll for another organization.' });
+    }
+
+    payrolls.splice(idx, 1);
+    saveDatabaseStateToDisk();
+    res.json({ success: true, message: 'Payroll record permanently deleted.' });
   });
 
   // 6. Excel Export Endpoint (.xlsx)
@@ -3107,7 +3181,28 @@ System Administration • LMS by Umar`;
       resolvedBy: req.currentUser ? req.currentUser.id : 'usr-supervisor-1'
     };
 
+    saveDatabaseStateToDisk();
     res.json(complaints[idx]);
+  });
+
+  // Permanently Delete Complaint (Hard Delete)
+  app.delete('/api/complaints/:id', (req: AuthenticatedRequest, res) => {
+    if (req.userRole !== 'Super Admin' && req.userRole !== 'Owner') {
+      return res.status(403).json({ error: 'Forbidden: Only Super Admin or Owner can delete complaint records.' });
+    }
+    const { id } = req.params;
+    const cIdx = complaints.findIndex(c => c.id === id);
+    if (cIdx === -1) {
+      return res.status(404).json({ error: 'Complaint not found.' });
+    }
+    const targetComp = complaints[cIdx];
+    if (req.userRole !== 'Owner' && (targetComp.companyId || 'comp-001') !== req.companyId) {
+      return res.status(403).json({ error: 'Forbidden: Cannot delete complaint from a different organization.' });
+    }
+
+    complaints.splice(cIdx, 1);
+    saveDatabaseStateToDisk();
+    res.json({ success: true, message: 'Complaint permanently deleted.' });
   });
 
   // 8. Notices Endpoint
@@ -3131,11 +3226,33 @@ System Administration • LMS by Umar`;
       targetGroup: req.body.targetGroup || 'All',
       datePosted: new Date().toISOString().replace('T', ' ').substring(0, 16),
       postedBy: req.currentUser ? req.currentUser.name : 'Management',
-      priority: req.body.priority || 'Normal'
+      priority: req.body.priority || 'Normal',
+      companyId: req.companyId || 'comp-001'
     };
 
     notices.unshift(newNotice);
+    saveDatabaseStateToDisk();
     res.status(201).json(newNotice);
+  });
+
+  // Permanently Delete Notice (Hard Delete)
+  app.delete('/api/notices/:id', (req: AuthenticatedRequest, res) => {
+    if (req.userRole !== 'Super Admin' && req.userRole !== 'Owner') {
+      return res.status(403).json({ error: 'Forbidden: Only Super Admin or Owner can delete notices.' });
+    }
+    const { id } = req.params;
+    const nIdx = notices.findIndex(n => n.id === id);
+    if (nIdx === -1) {
+      return res.status(404).json({ error: 'Notice not found.' });
+    }
+    const targetNotice = notices[nIdx];
+    if (req.userRole !== 'Owner' && (targetNotice.companyId || 'comp-001') !== req.companyId) {
+      return res.status(403).json({ error: 'Forbidden: Cannot delete notice from a different organization.' });
+    }
+
+    notices.splice(nIdx, 1);
+    saveDatabaseStateToDisk();
+    res.json({ success: true, message: 'Notice permanently deleted.' });
   });
 
   // =========================================================================

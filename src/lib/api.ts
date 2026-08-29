@@ -210,6 +210,12 @@ export async function updateComplaintStatusApi(id: string, status: Complaint['st
   }, currentUser);
 }
 
+export async function deleteComplaintApi(id: string, currentUser?: User): Promise<{ success: boolean; message: string }> {
+  return fetchApi<{ success: boolean; message: string }>(`/api/complaints/${id}`, {
+    method: 'DELETE'
+  }, currentUser);
+}
+
 // 8. Notices
 export async function getNoticesApi(currentUser?: User): Promise<Notice[]> {
   return fetchApi<Notice[]>('/api/notices', {}, currentUser);
@@ -219,6 +225,12 @@ export async function submitNoticeApi(notice: Partial<Notice>, currentUser?: Use
   return fetchApi<Notice>('/api/notices', {
     method: 'POST',
     body: JSON.stringify(notice)
+  }, currentUser);
+}
+
+export async function deleteNoticeApi(id: string, currentUser?: User): Promise<{ success: boolean; message: string }> {
+  return fetchApi<{ success: boolean; message: string }>(`/api/notices/${id}`, {
+    method: 'DELETE'
   }, currentUser);
 }
 
