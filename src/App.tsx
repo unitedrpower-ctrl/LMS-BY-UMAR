@@ -161,6 +161,73 @@ export default function App() {
     fetchBackendData();
   }, [currentUserId]);
 
+  // Real-Time Attendance & Worker Status Synchronization (SSE Stream + Polling Fallback)
+  useEffect(() => {
+    if (!currentUserId) return;
+    const uContext = users.find(u => u.id === currentUserId);
+    const compId = uContext?.companyId || 'comp-001';
+
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource(`/api/events/attendance?companyId=${encodeURIComponent(compId)}&userId=${encodeURIComponent(currentUserId)}`);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'ATTENDANCE_UPDATE' && Array.isArray(data.attendance)) {
+            setAttendance((prev) => {
+              const updatedMap = new Map(prev.map(a => [`${a.userId}:${a.date}`, a]));
+              data.attendance.forEach((rec: Attendance) => {
+                updatedMap.set(`${rec.userId}:${rec.date}`, rec);
+              });
+              return Array.from(updatedMap.values());
+            });
+
+            if (Array.isArray(data.recalculatedPayrolls) && data.recalculatedPayrolls.length > 0) {
+              setPayrolls((prev) => {
+                const payMap = new Map(prev.map(p => [`${p.userId}:${p.monthYear}`, p]));
+                data.recalculatedPayrolls.forEach((p: Payroll) => {
+                  payMap.set(`${p.userId}:${p.monthYear}`, p);
+                });
+                return Array.from(payMap.values());
+              });
+            }
+          }
+        } catch {
+          // ignore keepalive or parse errors
+        }
+      };
+
+      eventSource.onerror = () => {
+        // Browser automatically attempts reconnect on drop
+      };
+    } catch (sseErr) {
+      console.warn("SSE connection error, relying on polling fallback:", sseErr);
+    }
+
+    // Reactive backup sync every 12 seconds for full consistency
+    const pollInterval = setInterval(async () => {
+      try {
+        const u = users.find(usr => usr.id === currentUserId) || undefined;
+        const [freshAtt, freshPay] = await Promise.all([
+          getAttendanceApi(u),
+          getPayrollApi(u)
+        ]);
+        if (freshAtt && freshAtt.length > 0) setAttendance(freshAtt);
+        if (freshPay && freshPay.length > 0) setPayrolls(freshPay);
+      } catch {
+        // silent polling ignore
+      }
+    }, 12000);
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+      clearInterval(pollInterval);
+    };
+  }, [currentUserId]);
+
   const handleRefreshUsers = async (): Promise<User[]> => {
     try {
       const uContext = users.find(u => u.id === currentUserId) || undefined;

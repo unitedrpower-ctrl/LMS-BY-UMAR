@@ -246,8 +246,29 @@ export function runDatabaseMigrationCleanup() {
     }
   });
 
-  // 3. Ensure all companies have valid invitationToken and invitation record
-  companies.forEach(comp => {
+  // 3. Ensure all companies have unique companyCode, invitationToken, and invitation record
+  companies.forEach((comp, idx) => {
+    if (!comp.companyCode && !comp.company_code) {
+      if (comp.id === 'comp-owner') {
+        comp.companyCode = 'HQ-001';
+      } else if (comp.id === 'comp-001') {
+        comp.companyCode = 'BAW-001';
+      } else if (comp.id === 'comp-002') {
+        comp.companyCode = 'ZCON-005';
+      } else if (comp.id === 'comp-003') {
+        comp.companyCode = 'DES-003';
+      } else {
+        const cleanPrefix = (comp.name || 'LMS').replace(/[^a-zA-Z0-9]/g, '').toUpperCase().substring(0, 4) || 'LMS';
+        comp.companyCode = `${cleanPrefix}-${String(idx + 1).padStart(3, '0')}`;
+      }
+    }
+    if (!comp.companyCode && comp.company_code) {
+      comp.companyCode = comp.company_code;
+    }
+    if (!comp.company_code && comp.companyCode) {
+      comp.company_code = comp.companyCode;
+    }
+
     if (!comp.invitationToken) {
       comp.invitationToken = `inv-tok-${comp.id.replace('comp-', '')}`;
     }
@@ -270,6 +291,14 @@ export function runDatabaseMigrationCleanup() {
   // 4. Save clean migration state back to disk
   saveDatabaseStateToDisk();
   console.log('[DATABASE MIGRATION COMPLETE]: Database schema & multi-tenant keys aligned successfully.');
+}
+
+// Helper: Generate clean unique company code
+export function generateCompanyCode(name: string, index: number = 1): string {
+  if (!name) return `LMS-${String(index).padStart(3, '0')}`;
+  const clean = name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  const prefix = clean.substring(0, 4) || 'LMS';
+  return `${prefix}-${String(index).padStart(3, '0')}`;
 }
 
 // Initialize and migrate on boot
@@ -714,6 +743,36 @@ function recalculateWorkerPayroll(userId: string, monthYear: string): Payroll | 
   return updatedPayroll;
 }
 
+// Real-Time Server-Sent Events (SSE) Interface & Broadcaster
+interface SSEClient {
+  id: string;
+  res: Response;
+  companyId?: string;
+  userId?: string;
+}
+
+const sseClients: SSEClient[] = [];
+
+export function broadcastAttendanceEvent(data: {
+  type: 'ATTENDANCE_UPDATE';
+  attendance: Attendance[];
+  recalculatedPayrolls?: Payroll[];
+  companyId?: string;
+  timestamp?: string;
+}) {
+  const payload = `data: ${JSON.stringify(data)}\n\n`;
+  for (let i = sseClients.length - 1; i >= 0; i--) {
+    const client = sseClients[i];
+    try {
+      if (!client.companyId || client.companyId === 'all' || !data.companyId || client.companyId === data.companyId) {
+        client.res.write(payload);
+      }
+    } catch {
+      sseClients.splice(i, 1);
+    }
+  }
+}
+
 // Middleware: Extract Current User & Tenant Company from Custom Headers (RBAC & SaaS Context)
 interface AuthenticatedRequest extends Request {
   currentUser?: User;
@@ -828,6 +887,41 @@ async function startServer() {
     });
   });
 
+  // Real-Time Server-Sent Events (SSE) stream for attendance and worker status
+  app.get('/api/events/attendance', (req: Request, res: Response) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*'
+    });
+
+    const clientId = `sse-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const companyId = (req.query.companyId as string) || (req.headers['x-company-id'] as string) || undefined;
+    const userId = (req.query.userId as string) || (req.headers['x-user-id'] as string) || undefined;
+
+    const client: SSEClient = { id: clientId, res, companyId, userId };
+    sseClients.push(client);
+
+    res.write(`data: ${JSON.stringify({ type: 'CONNECTED', clientId, timestamp: new Date().toISOString() })}\n\n`);
+
+    const keepAliveInterval = setInterval(() => {
+      try {
+        res.write(': keepalive\n\n');
+      } catch {
+        clearInterval(keepAliveInterval);
+      }
+    }, 20000);
+
+    req.on('close', () => {
+      clearInterval(keepAliveInterval);
+      const index = sseClients.findIndex(c => c.id === clientId);
+      if (index !== -1) {
+        sseClients.splice(index, 1);
+      }
+    });
+  });
+
   // ==========================================
   // MULTI-TENANCY & SAAS PLATFORM OWNER ENDPOINTS
   // ==========================================
@@ -932,6 +1026,8 @@ async function startServer() {
 
     const {
       name,
+      companyCode: customCompanyCode,
+      company_code: customCompanyCodeAlias,
       crNumber,
       adminName,
       adminEmail,
@@ -962,10 +1058,13 @@ async function startServer() {
 
     const defaultCapacity = planType === '6_MONTH' ? 50 : planType === '1_YEAR' ? 100 : 250;
     const defaultPrice = planType === '6_MONTH' ? 7500 : planType === '1_YEAR' ? 12000 : 25000;
+    const assignedCode = (customCompanyCode || customCompanyCodeAlias || generateCompanyCode(name, companies.length + 1)).toUpperCase().trim();
 
     const newCompany: Company = {
       id: compId,
       name,
+      companyCode: assignedCode,
+      company_code: assignedCode,
       crNumber: crNumber || `CR-${Math.floor(1000000000 + Math.random() * 9000000000)}`,
       adminName: adminName || 'Tenant Administrator',
       adminEmail,
@@ -1202,9 +1301,12 @@ async function startServer() {
     const startDate = now.toISOString().split('T')[0];
     const expiryDate = expiryObj.toISOString().split('T')[0];
 
+    const demoCode = generateCompanyCode(clientName, companies.length + 1);
     const demoCompany: Company = {
       id: compId,
       name: `${clientName} (3-Day Demo)`,
+      companyCode: demoCode,
+      company_code: demoCode,
       crNumber: 'CR-DEMO-72HR',
       adminName: clientName,
       adminEmail: normalizedEmail,
@@ -1610,58 +1712,86 @@ Platform Administration • LMS by Umar`;
     });
   });
 
-  // Exact Company-Scoped Worker Authentication Endpoint
+  // Exact Company-Scoped Worker Authentication Endpoint (3-Factor Worker Login Engine)
   app.post(['/api/auth/worker-login', '/api/auth/login'], (req, res) => {
-    const { serialNumber, email, loginSerial, iqamaId, password, companyToken, company_id, companyId, tenantId, company } = req.body || {};
+    const { 
+      companyCode,
+      company_code,
+      serialNumber, 
+      email, 
+      loginSerial, 
+      iqamaId, 
+      password, 
+      companyToken, 
+      company_id, 
+      companyId, 
+      tenantId, 
+      company 
+    } = req.body || {};
     
+    const inputCode = (companyCode || company_code || companyToken || company_id || companyId || tenantId || company || '').toString().trim();
     const inputId = (serialNumber || loginSerial || iqamaId || email || '').toString().trim().toLowerCase();
     const cleanPass = (password || '').toString().trim();
-    const targetCompId = (companyToken || company_id || companyId || tenantId || company || '').toString().trim();
+
+    if (!inputCode) {
+      return res.status(400).json({ error: 'Company Code is required for worker login (e.g. BAW-001 or ZCON-005).' });
+    }
 
     if (!inputId) {
       return res.status(400).json({ error: 'Worker Serial Number, Email, or Iqama ID is required.' });
     }
 
-    // 1. Candidate workers: WHERE role IN ('Labor', 'Site Supervisor')
-    let candidateWorkers = users.filter(u => u.role === 'Labor' || u.role === 'Site Supervisor');
-
-    // 2. Strict Company Scope Query: WHERE company_id = current_company_id AND worker_id = input_id
-    if (targetCompId && targetCompId !== 'all') {
-      const companyScoped = candidateWorkers.filter(u => 
-        u.companyId === targetCompId || 
-        (u.companyId && u.companyId.toLowerCase() === targetCompId.toLowerCase())
-      );
-
-      // Filter by company scope if matched
-      if (companyScoped.length > 0) {
-        candidateWorkers = companyScoped;
-      }
+    if (!cleanPass) {
+      return res.status(400).json({ error: 'Worker Password is required.' });
     }
 
-    // 3. Worker lookup by loginSerial, iqamaId, email, or id
-    let worker = candidateWorkers.find(u => 
+    // 1. Resolve Company / Organization by companyCode, company_code, or ID
+    const normCode = inputCode.toLowerCase();
+    const matchedCompany = companies.find(c =>
+      (c.companyCode && c.companyCode.toLowerCase() === normCode) ||
+      (c.company_code && c.company_code.toLowerCase() === normCode) ||
+      c.id.toLowerCase() === normCode ||
+      (c.invitationToken && c.invitationToken.toLowerCase() === normCode)
+    );
+
+    if (!matchedCompany) {
+      return res.status(404).json({
+        error: `Invalid Company Code "${inputCode}". Organization was not found. Please verify the 3-part code with your HR Supervisor.`
+      });
+    }
+
+    // 2. Strict Company Scope Query: Match workers exclusively assigned to matchedCompany.id
+    const tenantWorkers = users.filter(u =>
+      (u.companyId === matchedCompany.id || (!u.companyId && matchedCompany.id === 'comp-001')) &&
+      (u.role === 'Labor' || u.role === 'Site Supervisor')
+    );
+
+    // 3. Worker lookup inside tenant
+    const worker = tenantWorkers.find(u =>
       (u.loginSerial && u.loginSerial.toLowerCase() === inputId) ||
       (u.iqamaId && u.iqamaId.toLowerCase() === inputId) ||
       u.email.toLowerCase() === inputId ||
       u.id.toLowerCase() === inputId
     );
 
-    // Immediate fallback: search all labor workers if company ID format differed slightly
+    // Cross-Company Protection Check: Did this worker attempt to sign into the wrong company?
     if (!worker) {
-      worker = users.find(u => 
+      const otherTenantWorker = users.find(u =>
         (u.role === 'Labor' || u.role === 'Site Supervisor') &&
         ((u.loginSerial && u.loginSerial.toLowerCase() === inputId) ||
          (u.iqamaId && u.iqamaId.toLowerCase() === inputId) ||
          u.email.toLowerCase() === inputId ||
          u.id.toLowerCase() === inputId)
       );
-    }
 
-    if (!worker) {
+      if (otherTenantWorker) {
+        return res.status(403).json({
+          error: `Access Denied: Worker "${inputId}" belongs to another organization. Cross-company access is strictly blocked.`
+        });
+      }
+
       return res.status(404).json({
-        error: targetCompId
-          ? `Worker Serial / Iqama ID "${inputId}" was not found under company portal "${targetCompId}". Please verify credentials.`
-          : `Worker Serial Number or Iqama ID "${inputId}" not found. Check your payslip or contact your HR Supervisor.`
+        error: `Worker "${inputId}" not found in Company "${matchedCompany.name}" (${matchedCompany.companyCode}). Please verify credentials.`
       });
     }
 
@@ -1669,7 +1799,7 @@ Platform Administration • LMS by Umar`;
     if (worker.loginPassword && worker.loginPassword.trim() !== '') {
       if (!worker.loginPassword.startsWith('$2b$10$')) {
         if (worker.loginPassword.trim() !== cleanPass) {
-          return res.status(401).json({ error: 'Incorrect Worker Password. Please verify password with HR.' });
+          return res.status(401).json({ error: 'Incorrect Worker Password. Please verify password with your supervisor.' });
         }
       }
     }
@@ -1678,14 +1808,15 @@ Platform Administration • LMS by Umar`;
       return res.status(403).json({ error: `Worker account is ${worker.status.toLowerCase()}. Access denied.` });
     }
 
-    if (!worker.companyId && targetCompId) {
-      worker.companyId = targetCompId;
+    if (!worker.companyId) {
+      worker.companyId = matchedCompany.id;
     }
 
     return res.json({
       success: true,
       user: worker,
-      message: `👷 Worker Authentication Verified! Logged in under Company: ${worker.companyId || targetCompId || 'comp-001'}`
+      company: matchedCompany,
+      message: `👷 Worker Authentication Verified! Logged in under: ${matchedCompany.name} (${matchedCompany.companyCode})`
     });
   });
 
@@ -1882,11 +2013,14 @@ System Administration • LMS by Umar`;
 
     let companyDetails = companies.find(c => c.id === inv!.companyId);
     if (!companyDetails) {
+       const code = generateCompanyCode(inv!.companyId, companies.length + 1);
        companyDetails = {
-         id: inv.companyId,
-         name: `Recovered Company (${inv.companyId})`,
+         id: inv!.companyId,
+         name: `Recovered Company (${inv!.companyId})`,
+         companyCode: code,
+         company_code: code,
          adminName: 'Tenant Admin',
-         adminEmail: inv.email,
+         adminEmail: inv!.email,
          crNumber: 'CR-000000',
          planType: '1_YEAR',
          subscriptionStartDate: new Date().toISOString().split('T')[0],
@@ -2476,6 +2610,17 @@ System Administration • LMS by Umar`;
       if (updatedPay) {
         recalculatedPayrolls.push(updatedPay);
       }
+    });
+
+    saveDatabaseStateToDisk();
+
+    // Broadcast instant real-time update to all connected worker portals and supervisor dashboards
+    broadcastAttendanceEvent({
+      type: 'ATTENDANCE_UPDATE',
+      attendance: updatedRecords,
+      recalculatedPayrolls,
+      companyId: req.companyId || 'comp-001',
+      timestamp: new Date().toISOString()
     });
 
     res.json({

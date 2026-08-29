@@ -4,6 +4,8 @@ export const INITIAL_COMPANIES: Company[] = [
   {
     id: 'comp-owner',
     name: 'Master LMS Platform HQ (Umar Owner)',
+    companyCode: 'HQ-001',
+    company_code: 'HQ-001',
     crNumber: '1010000000',
     adminName: 'Umar Al-Otaibi',
     adminEmail: 'unitedrpower@gmail.com',
@@ -19,6 +21,8 @@ export const INITIAL_COMPANIES: Company[] = [
   {
     id: 'comp-001',
     name: 'Al-Bawardi Contracting Co.',
+    companyCode: 'BAW-001',
+    company_code: 'BAW-001',
     crNumber: '1010892019',
     adminName: 'Eleanor Vance',
     adminEmail: 'admin@laborcorp.com',
@@ -34,6 +38,8 @@ export const INITIAL_COMPANIES: Company[] = [
   {
     id: 'comp-002',
     name: 'Saudi Mega Construction Ltd',
+    companyCode: 'ZCON-005',
+    company_code: 'ZCON-005',
     crNumber: '1010774321',
     adminName: 'Khalid Al-Mansoor',
     adminEmail: 'khalid.admin@gmail.com',
@@ -49,6 +55,8 @@ export const INITIAL_COMPANIES: Company[] = [
   {
     id: 'comp-003',
     name: 'Desert Oasis Industrial Solutions',
+    companyCode: 'DES-003',
+    company_code: 'DES-003',
     crNumber: '1010332211',
     adminName: 'Sarih Al-Ghamdi',
     adminEmail: 'expired.admin@oasis.sa',

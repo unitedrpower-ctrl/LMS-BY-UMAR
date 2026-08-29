@@ -60,6 +60,7 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
   // Form States
   const [emailOrSerial, setEmailOrSerial] = useState('');
   const [password, setPassword] = useState('');
+  const [workerCompanyCode, setWorkerCompanyCode] = useState('');
   
   // Password Reset States
   const [resetPasswordToken, setResetPasswordToken] = useState<string | null>(null);
@@ -113,9 +114,13 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
     const params = new URLSearchParams(window.location.search);
     const tok = params.get('inviteToken') || params.get('token');
     const resetTok = params.get('resetToken');
-    const compParam = params.get('company') || params.get('companyId');
+    const compParam = params.get('companyCode') || params.get('code') || params.get('company') || params.get('companyId') || params.get('companyToken') || params.get('company_id') || params.get('tenantId');
     const isRegisterPath = window.location.pathname.startsWith('/register') || window.location.pathname.startsWith('/accept-invite');
     
+    if (compParam) {
+      setWorkerCompanyCode(compParam.toUpperCase());
+    }
+
     if (resetTok) {
       setResetPasswordToken(resetTok);
       setActiveTab('resetPassword');
@@ -367,63 +372,63 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
     onLogin(loggedInAdmin);
   };
 
-  // Handle Worker Login
+  // Handle Worker Login (Unique Company Code Authentication Engine)
   const handleWorkerLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
-    const params = new URLSearchParams(window.location.search);
-    const companyTokenParam = params.get('companyToken') || params.get('company_id') || params.get('companyId') || params.get('tenantId') || params.get('company') || '';
-
+    const cleanCompanyCode = workerCompanyCode.trim().toUpperCase();
     const cleanInput = emailOrSerial.trim();
     const cleanPass = password.trim();
 
+    if (!cleanCompanyCode) {
+      setErrorMessage('Please enter your Organization / Company Code (e.g. BAW-001 or ZCON-005).');
+      return;
+    }
+
+    if (!cleanInput) {
+      setErrorMessage('Please enter your Worker Login Serial ID, Iqama ID, or Email.');
+      return;
+    }
+
+    if (!cleanPass) {
+      setErrorMessage('Please enter your Worker Password.');
+      return;
+    }
+
     try {
       const apiRes = await workerLoginApi({
+        companyCode: cleanCompanyCode,
         serialNumber: cleanInput,
-        password: cleanPass,
-        companyToken: companyTokenParam
+        password: cleanPass
       });
 
       if (apiRes.success && apiRes.user) {
         onLogin(apiRes.user);
         return;
+      } else if (apiRes.error) {
+        setErrorMessage(apiRes.error);
+        return;
       }
     } catch (apiErr: any) {
-      console.warn('[Worker Login API Fallback]: API call returned:', apiErr.message);
+      console.warn('[Worker Login API]:', apiErr.message);
+      setErrorMessage(apiErr.message || 'Worker login failed. Please verify your 3 credentials.');
+      return;
     }
 
-    // Client-side fallback if backend API returned notice or offline
+    // Client-side fallback if backend API is unreachable
     let matchingWorkers = users.filter((u) => u.role === 'Labor' || u.role === 'Site Supervisor');
-
-    // Read companyToken / company_id parameter directly from the URL and validate strictly
-    if (companyTokenParam && companyTokenParam !== 'all') {
-      const companySpecificWorkers = matchingWorkers.filter(
-        (u) => 
-          u.companyId === companyTokenParam || 
-          (u.companyId && u.companyId.toLowerCase() === companyTokenParam.toLowerCase())
-      );
-
-      if (companySpecificWorkers.length > 0) {
-        matchingWorkers = companySpecificWorkers;
-      }
-    }
-
     const target = matchingWorkers.find(
       (u) => 
         (u.loginSerial?.toLowerCase() === cleanInput.toLowerCase() || 
          u.email.toLowerCase() === cleanInput.toLowerCase() ||
          (u.iqamaId && u.iqamaId.toLowerCase() === cleanInput.toLowerCase()) ||
          u.id.toLowerCase() === cleanInput.toLowerCase())
-    ) || users.find(u => (u.role === 'Labor' || u.role === 'Site Supervisor') && (u.loginSerial?.toLowerCase() === cleanInput.toLowerCase() || u.email.toLowerCase() === cleanInput.toLowerCase()));
+    );
 
     if (!target) {
-      if (companyTokenParam) {
-        setErrorMessage(`Worker Serial Number or Iqama ID "${emailOrSerial}" was not found under company portal "${companyTokenParam}". Please verify your credentials or contact HR.`);
-      } else {
-        setErrorMessage('Worker Serial Number not found. Check your payslip or contact your Site Supervisor.');
-      }
+      setErrorMessage(`Worker "${cleanInput}" was not found under company "${cleanCompanyCode}". Please check your credentials.`);
       return;
     }
 
@@ -437,12 +442,7 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
       return;
     }
 
-    const workerUser: User = {
-      ...target,
-      companyId: target.companyId || companyTokenParam || 'comp-001'
-    };
-
-    onLogin(workerUser);
+    onLogin(target);
   };
 
   // Handle Forgot Password Request
@@ -1316,49 +1316,100 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
         {/* Tab 2: Worker Login */}
         {activeTab === 'workerLogin' && (
           <form onSubmit={handleWorkerLoginSubmit} className="space-y-4 text-xs">
-            {(() => {
-              const params = new URLSearchParams(window.location.search);
-              const compToken = params.get('companyToken') || params.get('company_id') || params.get('companyId') || params.get('tenantId') || params.get('company');
-              if (!compToken) return null;
-              return (
-                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-300 text-xs font-semibold flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Building2 className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Dedicated Company Portal: <strong className="text-white font-mono">{compToken}</strong></span>
-                  </div>
-                  <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] font-bold rounded uppercase font-mono">
-                    Scoped
-                  </span>
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-300 text-xs space-y-1.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 font-extrabold text-amber-200">
+                  <HardHat className="w-4 h-4 text-amber-400" />
+                  <span>3-Factor Worker Authentication</span>
                 </div>
-              );
-            })()}
+                <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] font-black rounded uppercase font-mono">
+                  Multi-Tenant Scoped
+                </span>
+              </div>
+              <p className="text-[11px] text-amber-300/80 leading-relaxed">
+                Provide your unique 3 credentials: Organization Code, Worker Serial ID, and Access Password.
+              </p>
+            </div>
 
+            {/* Input 1: Company Code */}
             <div>
-              <label className="block font-bold text-slate-300 mb-1">Worker Login Serial Number</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-bold text-slate-300">1. Company / Organization Code *</label>
+                <span className="text-[10px] text-slate-500 font-mono">e.g. BAW-001 or ZCON-005</span>
+              </div>
+              <div className="relative">
+                <Building2 className="w-4 h-4 absolute left-3 top-3 text-amber-500" />
+                <input
+                  id="worker-input-company-code"
+                  type="text"
+                  required
+                  placeholder="e.g. BAW-001, ZCON-005, MBN-001"
+                  value={workerCompanyCode}
+                  onChange={(e) => setWorkerCompanyCode(e.target.value.toUpperCase())}
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl pl-9 pr-3 py-2.5 text-white uppercase font-mono tracking-wider placeholder-slate-600 focus:outline-none font-extrabold"
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                <span className="text-[10px] text-slate-500">Quick select:</span>
+                {[
+                  { label: 'BAW-001 (Bawabat)', code: 'BAW-001' },
+                  { label: 'ZCON-005 (Z Constr)', code: 'ZCON-005' },
+                  { label: 'MBN-001 (MBN)', code: 'MBN-001' },
+                  { label: 'SCON-002 (Saudi Con)', code: 'SCON-002' },
+                  { label: 'ALR-003 (Al-Rashid)', code: 'ALR-003' },
+                ].map(item => (
+                  <button
+                    key={item.code}
+                    type="button"
+                    onClick={() => setWorkerCompanyCode(item.code)}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                      workerCompanyCode === item.code
+                        ? 'bg-amber-500 text-slate-950 shadow-sm'
+                        : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-slate-800'
+                    }`}
+                  >
+                    {item.code}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Input 2: Worker Serial / Email / Iqama */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-bold text-slate-300">2. Worker Login ID / Serial / Email *</label>
+                <span className="text-[10px] text-slate-500 font-mono">e.g. LMS-001-001 or EMP-1001</span>
+              </div>
               <div className="relative">
                 <HardHat className="w-4 h-4 absolute left-3 top-3 text-amber-500" />
                 <input
+                  id="worker-input-serial"
                   type="text"
                   required
-                  placeholder="EMP-1001"
+                  placeholder="e.g. LMS-001-001, EMP-1001, or 2100984712"
                   value={emailOrSerial}
                   onChange={(e) => setEmailOrSerial(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white uppercase font-mono placeholder-slate-600 focus:outline-none focus:border-amber-500 font-bold"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl pl-9 pr-3 py-2.5 text-white uppercase font-mono placeholder-slate-600 focus:outline-none font-bold"
                 />
               </div>
             </div>
 
+            {/* Input 3: Password */}
             <div>
-              <label className="block font-bold text-slate-300 mb-1">Worker Access Password</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-bold text-slate-300">3. Worker Password *</label>
+                <span className="text-[10px] text-slate-500 font-mono">Default: 123</span>
+              </div>
               <div className="relative">
                 <KeyRound className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
                 <input
+                  id="worker-input-password"
                   type="password"
                   required
-                  placeholder="WorkerPass#1"
+                  placeholder="Enter worker password (e.g. 123)"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 font-medium"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none font-medium"
                 />
               </div>
             </div>
@@ -1366,9 +1417,9 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
             <button
               type="submit"
               id="btn-submit-worker-login"
-              className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2"
+              className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
             >
-              <HardHat className="w-4 h-4" /> Access Worker Portal
+              <HardHat className="w-4 h-4" /> Authenticate & Access Worker Portal
             </button>
 
           </form>

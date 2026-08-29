@@ -7,6 +7,8 @@ export type CompanyStatus = 'Active' | 'Expired' | 'Suspended';
 export interface Company {
   id: string; // e.g., 'comp-001'
   name: string;
+  companyCode: string; // e.g., 'BAW-001' or 'ZCON-005'
+  company_code?: string; // alias support
   crNumber?: string; // Commercial Registration / Trade License Number
   adminName: string;
   adminEmail: string;

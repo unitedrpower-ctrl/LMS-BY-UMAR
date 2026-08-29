@@ -321,14 +321,18 @@ export async function googleAuthApi(data: {
 }
 
 export async function workerLoginApi(data: {
+  companyCode?: string;
+  company_code?: string;
   serialNumber: string;
   password?: string;
   companyToken?: string;
   companyId?: string;
 }): Promise<{
   success: boolean;
-  user: User;
-  message: string;
+  user?: User;
+  message?: string;
+  error?: string;
+  company?: Company;
 }> {
   return fetchApi('/api/auth/worker-login', {
     method: 'POST',
