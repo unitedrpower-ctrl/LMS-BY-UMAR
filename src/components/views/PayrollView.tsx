@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Payroll, User, Attendance, SystemSettings } from '../../types';
+import { useI18n } from '../../lib/i18n';
 import { UserAvatar } from '../UserAvatar';
 import { 
   DollarSign, 
@@ -45,6 +46,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
   currentUser,
   settings
 }) => {
+  const { t } = useI18n();
   const [selectedMonth, setSelectedMonth] = useState('2026-07');
   const [roleCategory, setRoleCategory] = useState<'Labor' | 'Staff' | 'All'>('Labor');
   const [selectedSponsor, setSelectedSponsor] = useState<string>('All');

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, Site, Attendance, Payroll, Complaint, Notice, DocumentItem, SystemSettings } from './types';
-import { LanguageCode } from './lib/i18n';
+import { LanguageCode, I18nProvider } from './lib/i18n';
 import { 
   getInitialState, 
   saveToStorage, 
@@ -583,12 +583,16 @@ export default function App() {
   // GLOBAL AUTHENTICATION GUARD: If unauthenticated, restrict access to Public Access Auth Screen only
   if (!currentUser) {
     return (
-      <PublicAuthGuardView
-        users={users}
-        onLogin={handleLogin}
-        onSignUp={handleSignUp}
-        onRefreshUsers={handleRefreshUsers}
-      />
+      <I18nProvider currentLang={currentLang} onLanguageChange={setCurrentLang}>
+        <PublicAuthGuardView
+          users={users}
+          onLogin={handleLogin}
+          onSignUp={handleSignUp}
+          onRefreshUsers={handleRefreshUsers}
+          lang={currentLang}
+          onLanguageChange={setCurrentLang}
+        />
+      </I18nProvider>
     );
   }
 
@@ -735,19 +739,70 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white">
-      {isMobileFrame ? (
-        /* Mobile Smartphone Device Simulation Frame */
-        <div className="flex-1 flex items-center justify-center p-2 sm:p-6 bg-slate-950">
-          <div className="w-full max-w-[420px] h-[860px] max-h-[95vh] bg-slate-900 border-4 border-slate-800 rounded-[40px] shadow-2xl flex flex-col overflow-hidden relative ring-1 ring-slate-700/50">
-            {/* Mobile Status Bar Notch */}
-            <div className="h-6 bg-slate-900 text-slate-400 text-[10px] px-6 flex items-center justify-between font-mono flex-shrink-0 border-b border-slate-800/80">
-              <span>9:41 AM</span>
-              <div className="w-16 h-3.5 bg-slate-800 rounded-full mx-auto" />
-              <span>100% 🔋</span>
-            </div>
+    <I18nProvider currentLang={currentLang} onLanguageChange={setCurrentLang}>
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white">
+        {isMobileFrame ? (
+          /* Mobile Smartphone Device Simulation Frame */
+          <div className="flex-1 flex items-center justify-center p-2 sm:p-6 bg-slate-950">
+            <div className="w-full max-w-[420px] h-[860px] max-h-[95vh] bg-slate-900 border-4 border-slate-800 rounded-[40px] shadow-2xl flex flex-col overflow-hidden relative ring-1 ring-slate-700/50">
+              {/* Mobile Status Bar Notch */}
+              <div className="h-6 bg-slate-900 text-slate-400 text-[10px] px-6 flex items-center justify-between font-mono flex-shrink-0 border-b border-slate-800/80">
+                <span>9:41 AM</span>
+                <div className="w-16 h-3.5 bg-slate-800 rounded-full mx-auto" />
+                <span>100% 🔋</span>
+              </div>
 
-            {/* App Header */}
+              {/* App Header */}
+              <HeaderBar
+                currentUser={currentUser}
+                allUsers={users}
+                tenantCompany={tenantCompany}
+                onSelectUser={setCurrentUserId}
+                isMobileFrame={isMobileFrame}
+                onToggleMobileFrame={() => setIsMobileFrame(!isMobileFrame)}
+                onResetData={handleResetData}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                onOpenAuthModal={() => setIsAuthModalOpen(true)}
+                onLogout={handleLogout}
+                theme={theme}
+                onToggleTheme={handleToggleTheme}
+                currentLang={currentLang}
+                onChangeLang={setCurrentLang}
+              />
+
+              {/* Navigation */}
+              <Navigation
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                userRole={currentUser.role}
+                unresolvedCount={unresolvedComplaintsCount}
+                pendingLoginCount={users.filter(u => u.status === 'Pending').length}
+                lang={currentLang}
+              />
+
+              {/* Mobile Content Area */}
+              <main className="flex-1 overflow-y-auto p-4 bg-slate-100 text-slate-900">
+                <SubscriptionExpiredGuard 
+                  currentUser={currentUser} 
+                  company={tenantCompany} 
+                  onRefreshStatus={handleRefreshTenantCompany}
+                >
+                  {renderActiveView()}
+                </SubscriptionExpiredGuard>
+              </main>
+
+              {/* Phone Home Indicator Bar */}
+              <div className="h-4 bg-slate-900 flex items-center justify-center flex-shrink-0">
+                <div className="w-32 h-1 bg-slate-700 rounded-full" />
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Responsive Full-Screen App Layout */
+          <div className={`flex-1 flex flex-col min-h-screen transition-colors duration-300 ${
+            theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
+          }`}>
             <HeaderBar
               currentUser={currentUser}
               allUsers={users}
@@ -766,7 +821,6 @@ export default function App() {
               onChangeLang={setCurrentLang}
             />
 
-            {/* Navigation */}
             <Navigation
               activeTab={activeTab}
               setActiveTab={setActiveTab}
@@ -776,8 +830,7 @@ export default function App() {
               lang={currentLang}
             />
 
-            {/* Mobile Content Area */}
-            <main className="flex-1 overflow-y-auto p-4 bg-slate-100 text-slate-900">
+            <main className="flex-1 w-full min-h-screen px-4 sm:px-6 lg:px-8 py-6">
               <SubscriptionExpiredGuard 
                 currentUser={currentUser} 
                 company={tenantCompany} 
@@ -786,87 +839,40 @@ export default function App() {
                 {renderActiveView()}
               </SubscriptionExpiredGuard>
             </main>
-
-            {/* Phone Home Indicator Bar */}
-            <div className="h-4 bg-slate-900 flex items-center justify-center flex-shrink-0">
-              <div className="w-32 h-1 bg-slate-700 rounded-full" />
-            </div>
           </div>
-        </div>
-      ) : (
-        /* Responsive Full-Screen App Layout */
-        <div className={`flex-1 flex flex-col min-h-screen transition-colors duration-300 ${
-          theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
-        }`}>
-          <HeaderBar
+        )}
+
+        {/* Post-Login Mandatory Profile Completion Guard Modal */}
+        {currentUser && currentUser.profileCompleted === false && currentUser.role !== 'Owner' && (
+          <CompleteProfileModal
             currentUser={currentUser}
-            allUsers={users}
-            tenantCompany={tenantCompany}
-            onSelectUser={setCurrentUserId}
-            isMobileFrame={isMobileFrame}
-            onToggleMobileFrame={() => setIsMobileFrame(!isMobileFrame)}
-            onResetData={handleResetData}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            onOpenAuthModal={() => setIsAuthModalOpen(true)}
-            onLogout={handleLogout}
-            theme={theme}
-            onToggleTheme={handleToggleTheme}
-            currentLang={currentLang}
-            onChangeLang={setCurrentLang}
+            onProfileSaved={(updatedUser) => {
+              setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+            }}
           />
+        )}
 
-          <Navigation
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            userRole={currentUser.role}
-            unresolvedCount={unresolvedComplaintsCount}
-            pendingLoginCount={users.filter(u => u.status === 'Pending').length}
-            lang={currentLang}
+        {/* Force Password Change Modal for First-Time Admin Logins */}
+        {currentUser && currentUser.mustChangePassword === true && currentUser.role !== 'Labor' && currentUser.role !== 'Owner' && (
+          <ForcePasswordChangeModal
+            currentUser={currentUser}
+            onPasswordChanged={(updatedUser) => {
+              setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+              saveToStorage(STORAGE_KEYS.CURRENT_USER_ID, updatedUser.id);
+              localStorage.setItem('lms_current_user_id', updatedUser.id);
+            }}
           />
+        )}
 
-          <main className="flex-1 w-full min-h-screen px-4 sm:px-6 lg:px-8 py-6">
-            <SubscriptionExpiredGuard 
-              currentUser={currentUser} 
-              company={tenantCompany} 
-              onRefreshStatus={handleRefreshTenantCompany}
-            >
-              {renderActiveView()}
-            </SubscriptionExpiredGuard>
-          </main>
-        </div>
-      )}
-
-      {/* Post-Login Mandatory Profile Completion Guard Modal */}
-      {currentUser && currentUser.profileCompleted === false && currentUser.role !== 'Owner' && (
-        <CompleteProfileModal
-          currentUser={currentUser}
-          onProfileSaved={(updatedUser) => {
-            setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-          }}
+        {/* Auth Portal Modal */}
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          users={users}
+          onLogin={handleLogin}
+          onSignUp={handleSignUp}
         />
-      )}
-
-      {/* Force Password Change Modal for First-Time Admin Logins */}
-      {currentUser && currentUser.mustChangePassword === true && currentUser.role !== 'Labor' && currentUser.role !== 'Owner' && (
-        <ForcePasswordChangeModal
-          currentUser={currentUser}
-          onPasswordChanged={(updatedUser) => {
-            setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-            saveToStorage(STORAGE_KEYS.CURRENT_USER_ID, updatedUser.id);
-            localStorage.setItem('lms_current_user_id', updatedUser.id);
-          }}
-        />
-      )}
-
-      {/* Auth Portal Modal */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        users={users}
-        onLogin={handleLogin}
-        onSignUp={handleSignUp}
-      />
-    </div>
+      </div>
+    </I18nProvider>
   );
 }

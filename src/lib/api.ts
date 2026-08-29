@@ -401,6 +401,29 @@ export async function onboardCompanyApi(data: {
   }, currentUser);
 }
 
+export async function onboardTenantApi(data: {
+  name: string;
+  adminName: string;
+  adminEmail: string;
+  planType?: SubscriptionPlanType;
+  maxLaborersAllowed?: number;
+  pricePaidSar?: number;
+  crNumber?: string;
+  contactPhone?: string;
+  initialPassword?: string;
+}, currentUser?: User): Promise<{
+  success: boolean;
+  company: Company;
+  invitation: RoleInvitation;
+  emailBody: string;
+  inviteUrl: string;
+}> {
+  return fetchApi('/api/admin/onboard-tenant', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }, currentUser);
+}
+
 export async function updateCompanySubscriptionApi(
   id: string,
   data: {

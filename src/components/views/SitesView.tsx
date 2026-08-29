@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Site, User, Attendance } from '../../types';
+import { useI18n } from '../../lib/i18n';
 import { UserAvatar } from '../UserAvatar';
 import { 
   Building2, 
@@ -35,6 +36,7 @@ export const SitesView: React.FC<SitesViewProps> = ({
   onSaveSite,
   currentUserRole
 }) => {
+  const { t } = useI18n();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState('2026-07');

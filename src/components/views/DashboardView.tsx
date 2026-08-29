@@ -1,6 +1,7 @@
 import React from 'react';
 import { User, Site, Attendance, Payroll, Complaint, Notice } from '../../types';
 import { getIqamaExpiryStatus } from '../../utils/iqamaUtils';
+import { useI18n } from '../../lib/i18n';
 import { UserAvatar } from '../UserAvatar';
 import { 
   Building2, 
@@ -11,11 +12,11 @@ import {
   Megaphone, 
   CheckCircle2, 
   Clock, 
-  ArrowUpRight,
-  ShieldCheck,
-  ChevronRight,
-  HardHat,
-  Database
+  ArrowUpRight, 
+  ShieldCheck, 
+  ChevronRight, 
+  HardHat, 
+  Database 
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -39,7 +40,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   notices,
   setActiveTab
 }) => {
+  const { t } = useI18n();
   const todayStr = new Date().toISOString().split('T')[0];
+
 
   // Derived metrics
   const totalLaborers = users.filter((u) => u.role === 'Labor').length;

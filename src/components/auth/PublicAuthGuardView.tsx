@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole, RoleInvitation } from '../../types';
+import { LanguageCode, getTranslation } from '../../lib/i18n';
 import { 
   Lock, 
   UserCheck, 
@@ -19,7 +20,8 @@ import {
   X,
   Crown,
   Sparkles,
-  Building2
+  Building2,
+  Globe
 } from 'lucide-react';
 import { validateInvitationApi, googleAuthApi, requestMasterOtpApi, verifyMasterOtpApi, registerUserApi, requestPasswordResetApi, resetPasswordApi, workerLoginApi } from '../../lib/api';
 
@@ -28,14 +30,20 @@ interface PublicAuthGuardViewProps {
   onLogin: (user: User) => void;
   onSignUp: (newUser: User) => void;
   onRefreshUsers?: () => Promise<User[]>;
+  lang?: LanguageCode;
+  onLanguageChange?: (lang: LanguageCode) => void;
 }
 
 export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
   users,
   onLogin,
   onSignUp,
-  onRefreshUsers
+  onRefreshUsers,
+  lang = 'en',
+  onLanguageChange
 }) => {
+  const t = (key: string, fallback?: string) => getTranslation(lang, key, fallback);
+
   const isMasterRoute = window.location.pathname.includes('/master-login') || 
                         window.location.pathname.includes('/master') ||
                         window.location.search.includes('master=true') || 
@@ -681,6 +689,20 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
       {/* Main Container Card */}
       <div className="w-full max-w-xl bg-slate-900/90 border border-slate-800 rounded-3xl shadow-2xl backdrop-blur-xl p-6 sm:p-8 space-y-6 relative z-10">
         
+        {/* Top Language Toggle in Auth Card */}
+        {onLanguageChange && (
+          <div className="flex justify-end -mt-2 -mr-2 mb-1">
+            <button
+              type="button"
+              onClick={() => onLanguageChange(lang === 'ar' ? 'en' : 'ar')}
+              className="px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700/80 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            >
+              <Globe className="w-3.5 h-3.5 text-amber-400" />
+              <span>{lang === 'ar' ? '🇺🇸 English' : '🇸🇦 العربية'}</span>
+            </button>
+          </div>
+        )}
+
         {/* Brand Logo & Header */}
         <div className="text-center space-y-2">
           <div className="w-16 h-16 bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center mx-auto shadow-xl border-2 border-amber-500/40">
@@ -696,19 +718,19 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
           </div>
           <div>
             <h1 className="text-2xl font-black text-white tracking-tight flex items-center justify-center gap-2">
-              <span>LMS</span>
+              <span>{t('appName', 'LMS')}</span>
               <span className="text-amber-400 text-xs font-semibold px-2.5 py-0.5 bg-amber-500/10 border border-amber-500/30 rounded-full">
                 by Umar
               </span>
             </h1>
             <p className="text-xs text-slate-400 font-medium mt-1">
-              Labor, Attendance & Payroll Management System
+              {t('appSubTitle', 'Labor, Attendance & Payroll Management System')}
             </p>
           </div>
 
           <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-950/80 border border-indigo-800/60 rounded-full text-[11px] text-indigo-300 font-semibold shadow-inner">
             <ShieldAlert className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Global Authentication Guard Active</span>
+            <span>{t('roleSuperAdmin', 'Global Authentication Guard Active')}</span>
           </div>
         </div>
 

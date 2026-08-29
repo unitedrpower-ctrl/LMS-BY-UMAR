@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
-import { LanguageCode, LanguageMetaList } from '../lib/i18n';
+import { LanguageCode, LanguageMetaList, getTranslation, translateRole } from '../lib/i18n';
 import { 
   Building2, 
   Smartphone, 
@@ -63,6 +63,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const [isInstalled, setIsInstalled] = useState(false);
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
 
+  const t = (key: string, fallback?: string) => getTranslation(currentLang, key, fallback);
+
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
@@ -92,6 +94,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       setShowPwaModal(true);
     }
   };
+
   const getRoleBadgeColor = (role: UserRole) => {
     switch (role) {
       case 'Super Admin':
@@ -107,18 +110,12 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     }
   };
 
-  const getRoleIcon = (role: UserRole) => {
-    switch (role) {
-      case 'Super Admin':
-        return <ShieldCheck className="w-3.5 h-3.5" />;
-      case 'HR Admin':
-        return <UserCheck className="w-3.5 h-3.5" />;
-      case 'Site Supervisor':
-        return <Building2 className="w-3.5 h-3.5" />;
-      case 'Labor':
-        return <HardHat className="w-3.5 h-3.5" />;
-      default:
-        return <UserIcon className="w-3.5 h-3.5" />;
+  const toggleLanguageQuick = () => {
+    if (!onChangeLang) return;
+    if (currentLang === 'ar') {
+      onChangeLang('en');
+    } else {
+      onChangeLang('ar');
     }
   };
 
@@ -132,7 +129,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             id="btn-hamburger-menu"
             onClick={() => setIsHeaderMenuOpen(true)}
             className="p-2.5 bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white rounded-xl border border-slate-700 hover:border-indigo-500 shadow-md transition-all flex items-center justify-center cursor-pointer"
-            title="Open Side Sliding Navigation Drawer"
+            title={t('settings', 'Options Drawer')}
           >
             <Menu className="w-5 h-5" />
           </button>
@@ -152,11 +149,11 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             </div>
             <div className="min-w-0">
               <h1 className="font-extrabold text-base sm:text-lg tracking-tight leading-tight truncate text-slate-100 flex items-center gap-1.5">
-                <span>LMS</span>
+                <span>{t('appName', 'LMS')}</span>
                 <span className="text-amber-400 text-xs font-semibold px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 rounded-full">by Umar</span>
               </h1>
               <p className="text-[11px] text-slate-400 truncate hidden sm:block">
-                Labor, Attendance & Payroll Management System
+                {t('appSubTitle', 'Labor, Attendance & Payroll Management System')}
               </p>
             </div>
           </div>
@@ -168,7 +165,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 <div id="header-tenant-company-badge" className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-950/70 border border-emerald-500/40 rounded-xl text-emerald-300 font-extrabold text-xs shadow-inner">
                   <Building2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                   <span className="truncate max-w-[130px] sm:max-w-[200px] md:max-w-[280px]">
-                    <span className="text-emerald-400/80 font-normal text-[11px] hidden sm:inline">Working at: </span>
+                    <span className="text-emerald-400/80 font-normal text-[11px] hidden sm:inline">{t('workingAt', 'Working at')}: </span>
                     <span className="text-white font-black">{tenantCompany?.name || (currentUser as any)?.companyName || currentUser.companyId || 'Assigned Company'}</span>
                   </span>
                 </div>
@@ -176,14 +173,14 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 <div id="header-tenant-company-badge" className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-950/70 border border-purple-500/40 rounded-xl text-purple-200 font-extrabold text-xs shadow-inner">
                   <Building2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                   <span className="truncate max-w-[130px] sm:max-w-[200px] md:max-w-[280px]">
-                    <span className="text-white font-black">Platform Owner HQ</span>
+                    <span className="text-white font-black">{t('platformOwnerHq', 'Platform Owner HQ')}</span>
                   </span>
                 </div>
               ) : (
                 <div id="header-tenant-company-badge" className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-950/70 border border-indigo-500/40 rounded-xl text-indigo-200 font-extrabold text-xs shadow-inner">
                   <Building2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                   <span className="truncate max-w-[130px] sm:max-w-[200px] md:max-w-[280px]">
-                    <span className="text-indigo-300/80 font-normal text-[11px] hidden md:inline">Company: </span>
+                    <span className="text-indigo-300/80 font-normal text-[11px] hidden md:inline">{t('company', 'Company')}: </span>
                     <span className="text-white font-black">{tenantCompany?.name || (currentUser as any)?.companyName || currentUser.companyId || 'Registered Company'}</span>
                   </span>
                 </div>
@@ -192,8 +189,21 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           )}
         </div>
 
-        {/* Right Controls (Minimalist quick actions) */}
+        {/* Right Controls */}
         <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Direct Instant Language Switcher (1-Tap Arabic / English) */}
+          {onChangeLang && (
+            <button
+              id="btn-header-quick-language"
+              onClick={toggleLanguageQuick}
+              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              title="Switch between English and Arabic"
+            >
+              <Globe className="w-3.5 h-3.5 text-amber-400" />
+              <span className="font-extrabold">{currentLang === 'ar' ? '🇺🇸 English' : '🇸🇦 العربية'}</span>
+            </button>
+          )}
+
           {/* Login / Sign Up Portal Trigger Button */}
           {onOpenAuthModal && (
             <button
@@ -203,7 +213,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               title="Open Login / Sign Up Portal"
             >
               <UserCheck className="w-4 h-4" />
-              <span className="hidden sm:inline">Login / Sign Up</span>
+              <span className="hidden sm:inline">{t('login', 'Login / Sign Up')}</span>
             </button>
           )}
 
@@ -215,7 +225,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             title="Toggle All Header Options Drawer"
           >
             <Settings className="w-4 h-4 text-indigo-200" />
-            <span className="hidden md:inline">Options Drawer</span>
+            <span className="hidden md:inline">{t('settings', 'Options Drawer')}</span>
           </button>
         </div>
       </div>
@@ -233,8 +243,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                     <Settings className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="font-extrabold text-base text-white">Header Options & Controls</h2>
-                    <p className="text-[11px] text-slate-400">Manage all system settings and user options</p>
+                    <h2 className="font-extrabold text-base text-white">{t('settings', 'Header Options & Controls')}</h2>
+                    <p className="text-[11px] text-slate-400">{t('appSubTitle', 'Manage all system settings and user options')}</p>
                   </div>
                 </div>
                 <button
@@ -250,9 +260,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 {/* User Info Card */}
                 <div className="p-4 bg-slate-800/60 border border-slate-700/80 rounded-2xl space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Current User Session</span>
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{t('currentRole', 'Current User Session')}</span>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${getRoleBadgeColor(currentUser.role)}`}>
-                      {currentUser.role}
+                      {translateRole(currentUser.role, (currentLang || 'en') as LanguageCode)}
                     </span>
                   </div>
                   <div className="font-extrabold text-sm text-white">{currentUser.name}</div>
@@ -264,7 +274,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                   ['umarchoudhary259@gmail.com', 'umarchaudhary259@gmail.com', 'unitedrpower@gmail.com'].includes(currentUser.email?.toLowerCase())) && (
                   <div className="p-4 bg-slate-800/40 border border-slate-700/60 rounded-2xl space-y-2">
                     <label className="text-[11px] font-extrabold text-slate-300 uppercase tracking-wider block">
-                      Switch User Role & Identity
+                      {t('switchUser', 'Switch User Role & Identity')}
                     </label>
                     <select
                       id="slide-menu-role-select"
@@ -275,24 +285,24 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                       }}
                       className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
                     >
-                      <optgroup label="Super Admin">
+                      <optgroup label={t('roleSuperAdmin', 'Super Admin')}>
                         {allUsers.filter(u => u.role === 'Super Admin').map(u => (
-                          <option key={u.id} value={u.id}>🛡️ {u.name} (Super Admin)</option>
+                          <option key={u.id} value={u.id}>🛡️ {u.name} ({translateRole(u.role, (currentLang || 'en') as LanguageCode)})</option>
                         ))}
                       </optgroup>
-                      <optgroup label="HR Admin">
+                      <optgroup label={t('roleHrAdmin', 'HR Admin')}>
                         {allUsers.filter(u => u.role === 'HR Admin').map(u => (
-                          <option key={u.id} value={u.id}>👔 {u.name} (HR Admin)</option>
+                          <option key={u.id} value={u.id}>👔 {u.name} ({translateRole(u.role, (currentLang || 'en') as LanguageCode)})</option>
                         ))}
                       </optgroup>
-                      <optgroup label="Site Supervisor">
+                      <optgroup label={t('roleSupervisor', 'Site Supervisor')}>
                         {allUsers.filter(u => u.role === 'Site Supervisor').map(u => (
-                          <option key={u.id} value={u.id}>🏗️ {u.name} (Supervisor)</option>
+                          <option key={u.id} value={u.id}>🏗️ {u.name} ({translateRole(u.role, (currentLang || 'en') as LanguageCode)})</option>
                         ))}
                       </optgroup>
-                      <optgroup label="Laborers">
+                      <optgroup label={t('roleLabor', 'Laborers')}>
                         {allUsers.filter(u => u.role === 'Labor').map(u => (
-                          <option key={u.id} value={u.id}>👷 {u.name} (Laborer)</option>
+                          <option key={u.id} value={u.id}>👷 {u.name} ({translateRole(u.role, (currentLang || 'en') as LanguageCode)})</option>
                         ))}
                       </optgroup>
                     </select>
@@ -304,7 +314,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                   <div className="p-4 bg-slate-800/40 border border-slate-700/60 rounded-2xl space-y-2">
                     <label className="text-[11px] font-extrabold text-slate-300 uppercase tracking-wider block flex items-center gap-1.5">
                       <Globe className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>Interface Language (i18n)</span>
+                      <span>{t('interfaceLanguage', 'Interface Language (i18n)')}</span>
                     </label>
                     <select
                       id="slide-menu-lang-select"
@@ -334,7 +344,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                       className="p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl flex flex-col items-center justify-center gap-1.5 font-bold text-slate-200 transition-all"
                     >
                       {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-300" />}
-                      <span>{theme === 'dark' ? 'Day Mode' : 'Night Mode'}</span>
+                      <span>{theme === 'dark' ? t('dayMode', 'Day Mode') : t('nightMode', 'Night Mode')}</span>
                     </button>
                   )}
 
@@ -347,7 +357,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                     className="p-3 bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/60 rounded-xl flex flex-col items-center justify-center gap-1.5 font-bold text-indigo-300 transition-all"
                   >
                     <Download className="w-4 h-4 text-indigo-400" />
-                    <span>Install App</span>
+                    <span>{t('installApp', 'Install App')}</span>
                   </button>
 
                   {/* Device Frame Toggle */}
@@ -371,7 +381,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                     className="p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl flex flex-col items-center justify-center gap-1.5 font-bold text-red-300 transition-all"
                   >
                     <RotateCcw className="w-4 h-4 text-red-400" />
-                    <span>Reset Data</span>
+                    <span>{t('refresh', 'Reset Data')}</span>
                   </button>
                 </div>
 
@@ -385,7 +395,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                     className="w-full p-3 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all"
                   >
                     <Database className="w-4 h-4 text-amber-300" />
-                    <span>View PostgreSQL Schema Workbench</span>
+                    <span>{t('sql_workbench', 'View PostgreSQL Schema Workbench')}</span>
                   </button>
                 )}
 
@@ -399,14 +409,14 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                     className="w-full p-3 bg-rose-600/90 hover:bg-rose-600 text-white font-extrabold rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all border border-rose-500/50"
                   >
                     <LogOut className="w-4 h-4" />
-                    <span>Sign Out of Session</span>
+                    <span>{t('logout', 'Sign Out of Session')}</span>
                   </button>
                 )}
               </div>
 
               {/* Drawer Footer */}
               <div className="p-4 border-t border-slate-800 bg-slate-950/80 text-center text-[10px] text-slate-500">
-                LMS by Umar • Enterprise PWA Edition
+                {t('appName', 'LMS by Umar')} • Enterprise PWA Edition
               </div>
             </div>
           </div>
@@ -423,7 +433,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                   <Download className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-base text-white">Install LMS by Umar</h3>
+                  <h3 className="font-extrabold text-base text-white">{t('appName', 'Install LMS by Umar')}</h3>
                   <p className="text-[11px] text-slate-400">Progressive Web Application (PWA)</p>
                 </div>
               </div>
@@ -464,7 +474,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 onClick={() => setShowPwaModal(false)}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded-xl text-xs"
               >
-                Got It
+                {t('confirm', 'Got It')}
               </button>
             </div>
           </div>
@@ -473,3 +483,4 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     </header>
   );
 };
+

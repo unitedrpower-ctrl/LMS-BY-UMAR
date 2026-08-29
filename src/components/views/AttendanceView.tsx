@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Attendance, Site, User, AttendanceStatus, Payroll } from '../../types';
+import { useI18n } from '../../lib/i18n';
 import { UserAvatar } from '../UserAvatar';
 import { 
   CalendarCheck, 
@@ -41,6 +42,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   onSaveAttendance,
   payrolls = []
 }) => {
+  const { t } = useI18n();
   const todayStr = new Date().toISOString().split('T')[0];
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [selectedMonth, setSelectedMonth] = useState(todayStr.substring(0, 7)); // YYYY-MM
