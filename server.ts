@@ -754,7 +754,7 @@ interface SSEClient {
 const sseClients: SSEClient[] = [];
 
 export function broadcastAttendanceEvent(data: {
-  type: 'ATTENDANCE_UPDATE';
+  type: 'ATTENDANCE_UPDATE' | 'PAYROLL_REFRESH_SYNC';
   attendance: Attendance[];
   recalculatedPayrolls?: Payroll[];
   companyId?: string;
@@ -944,6 +944,34 @@ async function startServer() {
       staffCount,
       daysRemaining,
       maxLaborersAllowed: comp.maxLaborersAllowed
+    });
+  });
+
+  // Update Logged-in User's Tenant Company Settings (CR Number, Address, Logo, Name)
+  app.put('/api/tenant/company-settings', (req: AuthenticatedRequest, res) => {
+    if (req.userRole !== 'Super Admin' && req.userRole !== 'HR Admin' && req.userRole !== 'Owner') {
+      return res.status(403).json({ error: 'Forbidden: Admin access required to update company settings.' });
+    }
+
+    const comp = req.userCompany || (req.companyId ? companies.find(c => c.id === req.companyId) : null) || companies[1] || companies[0];
+    if (!comp) {
+      return res.status(404).json({ error: 'Company not found.' });
+    }
+
+    const { crNumber, address, logoUrl, name, contactPhone } = req.body;
+    if (crNumber !== undefined) comp.crNumber = String(crNumber).trim();
+    if (address !== undefined) comp.address = String(address).trim();
+    if (logoUrl !== undefined) comp.logoUrl = String(logoUrl).trim();
+    if (name !== undefined && String(name).trim()) comp.name = String(name).trim();
+    if (contactPhone !== undefined) comp.contactPhone = String(contactPhone).trim();
+    comp.updatedAt = new Date().toISOString();
+
+    saveDatabaseStateToDisk();
+
+    res.json({
+      success: true,
+      company: comp,
+      message: 'Tenant company settings updated successfully.'
     });
   });
 
@@ -2873,6 +2901,48 @@ System Administration • LMS by Umar`;
     });
   });
 
+  // POST /api/payroll/refresh-sync - Commit Advance Deductions & Recalculate and Push to Worker Portals
+  app.post('/api/payroll/refresh-sync', (req: AuthenticatedRequest, res) => {
+    if (req.userRole !== 'Super Admin' && req.userRole !== 'HR Admin' && req.userRole !== 'Owner') {
+      return res.status(403).json({ error: 'Forbidden: Only administrators can refresh and commit payroll.' });
+    }
+
+    const monthYear = req.body.monthYear || new Date().toISOString().substring(0, 7);
+    const targetCompanyId = req.userRole === 'Owner' ? (req.body.companyId || req.companyId) : req.companyId;
+
+    // Filter relevant workers belonging to this tenant (or all if Owner)
+    let targetWorkers = users.filter(u => u.role === 'Labor' || u.role === 'Site Supervisor' || u.role === 'HR Admin');
+    if (targetCompanyId && targetCompanyId !== 'comp-owner' && targetCompanyId !== 'all') {
+      targetWorkers = targetWorkers.filter(u => (u.companyId || 'comp-001') === targetCompanyId);
+    }
+
+    const updatedPayrolls: Payroll[] = [];
+    targetWorkers.forEach(worker => {
+      const recalculated = recalculateWorkerPayroll(worker.id, monthYear);
+      if (recalculated) {
+        updatedPayrolls.push(recalculated);
+      }
+    });
+
+    saveDatabaseStateToDisk();
+
+    // Dynamically broadcast to all connected Worker Portals via SSE
+    const relevantAttendance = attendanceRecords.filter(a => a.date.startsWith(monthYear));
+    broadcastAttendanceEvent({
+      type: 'PAYROLL_REFRESH_SYNC',
+      attendance: relevantAttendance,
+      recalculatedPayrolls: updatedPayrolls,
+      companyId: targetCompanyId || 'comp-001',
+      timestamp: new Date().toISOString()
+    });
+
+    res.json({
+      success: true,
+      message: `Successfully synchronized payroll & advance deductions for ${updatedPayrolls.length} workers in ${monthYear}. Data pushed dynamically to Worker Portals.`,
+      payrolls: updatedPayrolls
+    });
+  });
+
   // Permanently Delete Attendance Record (Hard Delete)
   app.delete('/api/attendance/:id', (req: AuthenticatedRequest, res) => {
     if (req.userRole !== 'Super Admin' && req.userRole !== 'Owner' && req.userRole !== 'HR Admin' && req.userRole !== 'Site Supervisor') {
@@ -3401,8 +3471,47 @@ System Administration • LMS by Umar`;
 
   // =========================================================================
   // CLOUDINARY FILE UPLOADS & DOCUMENT VAULT API ENDPOINTS
-  // Folders: lms_worker_photos & lms_document_vault
+  // Folders: lms_company_logos, lms_worker_photos & lms_document_vault
   // =========================================================================
+  app.post('/api/upload/company-logo', uploadWorkerPhoto.single('logo'), async (req: AuthenticatedRequest, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No logo image file provided in request body.' });
+      }
+
+      let secureUrl = '';
+      if (isCloudinaryActive) {
+        try {
+          const uploadRes = await uploadToCloudinary(req.file.buffer, 'lms_company_logos', {
+            public_id: `company_logo_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
+          });
+          secureUrl = uploadRes.secure_url;
+        } catch (uploadErr: any) {
+          console.error('[CLOUDINARY LOGO UPLOAD FALLBACK]:', uploadErr.message);
+          secureUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+        }
+      } else {
+        secureUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      }
+
+      const comp = req.userCompany;
+      if (comp) {
+        comp.logoUrl = secureUrl;
+        comp.updatedAt = new Date().toISOString();
+        saveDatabaseStateToDisk();
+      }
+
+      return res.json({
+        success: true,
+        url: secureUrl,
+        secure_url: secureUrl,
+        message: 'Company logo successfully uploaded and saved.'
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Failed to upload company logo.', message: err.message });
+    }
+  });
+
   app.post('/api/upload/worker-photo', uploadWorkerPhoto.single('photo'), async (req: AuthenticatedRequest, res) => {
     try {
       if (!req.file) {

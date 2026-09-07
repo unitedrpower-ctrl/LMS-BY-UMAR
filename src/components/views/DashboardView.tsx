@@ -89,6 +89,56 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     (c) => c.userId === currentUser.id && c.date.startsWith(todayStr)
   ).length;
 
+  // Iqama Expiry Alert Engine State & Live Calculations
+  const [iqamaFilter, setIqamaFilter] = React.useState<'all' | 'expired' | '30days' | '60days'>('all');
+
+  const iqamaUserStats = React.useMemo(() => {
+    let expired = 0;
+    let critical15 = 0;
+    let warning30 = 0;
+    let notice60 = 0;
+    
+    users.forEach(u => {
+      if (u.iqamaExpiry) {
+        const st = getIqamaExpiryStatus(u.iqamaExpiry);
+        if (st.status === 'EXPIRED') expired++;
+        else if (st.status === 'URGENT') critical15++;
+        else if (st.status === 'WARNING') warning30++;
+        else if (st.status === 'NOTICE') notice60++;
+      }
+    });
+    return {
+      expired,
+      critical15,
+      warning30,
+      notice60,
+      totalActionRequired: expired + critical15 + warning30 + notice60
+    };
+  }, [users]);
+
+  const filteredIqamaUsers = React.useMemo(() => {
+    return users
+      .filter(u => u.iqamaExpiry || u.sponsorName)
+      .map(u => {
+        const statusInfo = getIqamaExpiryStatus(u.iqamaExpiry);
+        const isAlert = statusInfo.status === 'EXPIRED' || statusInfo.status === 'URGENT' || statusInfo.status === 'WARNING' || statusInfo.status === 'NOTICE';
+        return { user: u, statusInfo, isAlert };
+      })
+      .filter(item => {
+        if (iqamaFilter === 'expired') {
+          return item.statusInfo.status === 'EXPIRED' || item.statusInfo.status === 'URGENT';
+        }
+        if (iqamaFilter === '30days') {
+          return item.statusInfo.status === 'WARNING' || item.statusInfo.status === 'URGENT' || item.statusInfo.status === 'EXPIRED';
+        }
+        if (iqamaFilter === '60days') {
+          return item.statusInfo.status === 'NOTICE' || item.statusInfo.status === 'WARNING' || item.statusInfo.status === 'URGENT' || item.statusInfo.status === 'EXPIRED';
+        }
+        return true;
+      })
+      .sort((a, b) => (a.statusInfo.daysLeft ?? 999) - (b.statusInfo.daysLeft ?? 999));
+  }, [users, iqamaFilter]);
+
   // Filter notices for current user
   const relevantNotices = notices.filter(
     (n) => n.targetGroup === 'All' || n.targetGroup === currentUser.siteId
@@ -293,41 +343,106 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       )}
 
-      {/* IQAMA EXPIRY ALERTS WARNING PANEL (Requirement: 15-day / 10-day renewal tracker) */}
+      {/* IQAMA EXPIRY ALERTS WARNING PANEL (Requirement: Live 30-day & 60-day renewal tracker) */}
       {currentUser.role !== 'Labor' && (
-        <div className="bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-amber-500/10 border-2 border-amber-300 rounded-2xl p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-2">
+        <div id="admin-iqama-alert-center" className="bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-amber-500/10 border-2 border-amber-400 rounded-2xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-sm">
+              <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-sm shrink-0">
                 <AlertTriangle className="w-6 h-6 animate-pulse" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-base font-black text-slate-900 tracking-tight">
-                    Worker Iqama Expiry Tracker & Sponsor Alert Center
+                    Worker Iqama Renewal Expiry Alert Center
                   </h3>
-                  <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white font-black text-[10px] uppercase tracking-wider">
-                    {users.filter(u => {
-                      const st = getIqamaExpiryStatus(u.iqamaExpiry);
-                      return st.status === 'EXPIRED' || st.status === 'URGENT' || st.status === 'WARNING';
-                    }).length} Action Required
+                  <span className={`px-2.5 py-0.5 rounded-full font-black text-[11px] uppercase tracking-wider ${
+                    iqamaUserStats.totalActionRequired > 0 
+                      ? 'bg-rose-600 text-white animate-pulse' 
+                      : 'bg-emerald-600 text-white'
+                  }`}>
+                    {iqamaUserStats.totalActionRequired} Action Required
                   </span>
                 </div>
-                <p className="text-xs text-slate-600 font-medium">
-                  Automatically flags worker residence permits expiring in 15 days or less so HR can initiate renewal with third-party sponsors / Kafeel.
+                <p className="text-xs text-slate-600 font-medium mt-0.5">
+                  Live real-time monitoring engine: Automatically calculates remaining days upon worker profile creation or edits, flagging permits expiring within 30 and 60 days.
                 </p>
               </div>
             </div>
 
             <button
               onClick={() => setActiveTab('users')}
-              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs inline-flex items-center gap-1.5 shadow-xs"
+              className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs inline-flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
             >
               <Users className="w-4 h-4 text-amber-400" />
               Manage All Workers & Kafeel
             </button>
           </div>
 
+          {/* Interactive Filter Pills for 30 / 60 / Expired Days */}
+          <div className="flex items-center gap-2 flex-wrap pt-1">
+            <button
+              type="button"
+              onClick={() => setIqamaFilter('all')}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                iqamaFilter === 'all'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-white/80 hover:bg-white text-slate-700 border border-slate-300'
+              }`}
+            >
+              <span>All Workers with Iqama</span>
+              <span className="px-1.5 py-0.2 bg-slate-200 text-slate-900 rounded-md text-[10px] font-black">
+                {users.filter(u => u.iqamaExpiry).length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIqamaFilter('expired')}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                iqamaFilter === 'expired'
+                  ? 'bg-rose-600 text-white shadow-xs'
+                  : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300'
+              }`}
+            >
+              <span>Expired & Critical (≤15d)</span>
+              <span className="px-1.5 py-0.2 bg-rose-200 text-rose-950 rounded-md text-[10px] font-black">
+                {iqamaUserStats.expired + iqamaUserStats.critical15}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIqamaFilter('30days')}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                iqamaFilter === '30days'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+                  : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300'
+              }`}
+            >
+              <span>Warning: Expiring ≤30 Days</span>
+              <span className="px-1.5 py-0.2 bg-amber-200 text-amber-950 rounded-md text-[10px] font-black">
+                {iqamaUserStats.warning30 + iqamaUserStats.critical15 + iqamaUserStats.expired}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIqamaFilter('60days')}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                iqamaFilter === '60days'
+                  ? 'bg-yellow-500 text-slate-950 font-black shadow-xs'
+                  : 'bg-yellow-50 hover:bg-yellow-100 text-yellow-900 border border-yellow-300'
+              }`}
+            >
+              <span>Renewal Due: Expiring ≤60 Days</span>
+              <span className="px-1.5 py-0.2 bg-yellow-200 text-yellow-950 rounded-md text-[10px] font-black">
+                {iqamaUserStats.totalActionRequired}
+              </span>
+            </button>
+          </div>
+
+          {/* Iqama Alert Table */}
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
@@ -336,22 +451,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <th className="p-3">Worker Name</th>
                     <th className="p-3">Iqama ID</th>
                     <th className="p-3">Sponsor / Kafeel Agency</th>
+                    <th className="p-3">Issue Date</th>
                     <th className="p-3">Expiry Date</th>
                     <th className="p-3">Status & Warning Level</th>
                     <th className="p-3 text-right">Sponsor Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
-                  {users
-                    .filter(u => u.iqamaExpiry || u.sponsorName)
-                    .map(u => {
-                      const statusInfo = getIqamaExpiryStatus(u.iqamaExpiry);
-                      const isAlert = statusInfo.status === 'EXPIRED' || statusInfo.status === 'URGENT' || statusInfo.status === 'WARNING';
-                      return { user: u, statusInfo, isAlert };
-                    })
-                    .sort((a, b) => (a.statusInfo.daysLeft ?? 999) - (b.statusInfo.daysLeft ?? 999))
-                    .slice(0, 5)
-                    .map(({ user: u, statusInfo, isAlert }) => (
+                  {filteredIqamaUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-slate-500 font-medium">
+                        <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                        No workers match this Iqama renewal filter.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredIqamaUsers.slice(0, 8).map(({ user: u, statusInfo, isAlert }) => (
                       <tr 
                         key={u.id}
                         className={`hover:bg-slate-50 transition-colors ${
@@ -361,6 +476,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             ? 'bg-rose-50/50'
                             : statusInfo.status === 'WARNING'
                             ? 'bg-amber-50/60'
+                            : statusInfo.status === 'NOTICE'
+                            ? 'bg-yellow-50/40'
                             : ''
                         }`}
                       >
@@ -381,6 +498,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             {u.sponsorName || 'Direct Hire'}
                           </span>
                         </td>
+                        <td className="p-3 font-mono text-slate-600 text-[11px]">
+                          {u.iqamaIssueDate || '—'}
+                        </td>
                         <td className="p-3 font-mono text-slate-800 font-semibold">
                           {u.iqamaExpiry || 'Not specified'}
                         </td>
@@ -392,9 +512,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         <td className="p-3 text-right">
                           <button
                             onClick={() => {
-                              alert(`📩 Renewal notice sent to sponsor "${u.sponsorName || 'Agency'}" for worker ${u.name} (Iqama ID: ${u.iqamaId}).`);
+                              alert(`📩 Renewal notice sent to sponsor "${u.sponsorName || 'Agency'}" for worker ${u.name} (Iqama ID: ${u.iqamaId}). Expiry: ${u.iqamaExpiry || 'N/A'}`);
                             }}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 transition-all ${
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 transition-all cursor-pointer ${
                               isAlert 
                                 ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-xs' 
                                 : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
@@ -405,7 +525,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           </button>
                         </td>
                       </tr>
-                    ))}
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

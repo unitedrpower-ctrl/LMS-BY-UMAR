@@ -686,6 +686,66 @@ export async function deleteDocumentApi(docId: string, currentUser?: User): Prom
   }, currentUser);
 }
 
+// 18. Tenant Company Settings & Logo Branding
+export async function getTenantCompanyApi(currentUser?: User): Promise<{
+  company: Company;
+  isSubscriptionExpired: boolean;
+  workerCount: number;
+  staffCount: number;
+  daysRemaining: number;
+  maxLaborersAllowed: number;
+}> {
+  return fetchApi('/api/tenant/my-company', {}, currentUser);
+}
+
+export async function updateTenantCompanySettingsApi(
+  settingsData: { crNumber?: string; address?: string; logoUrl?: string; name?: string; contactPhone?: string },
+  currentUser?: User
+): Promise<{ success: boolean; company: Company; message: string }> {
+  return fetchApi('/api/tenant/company-settings', {
+    method: 'PUT',
+    body: JSON.stringify(settingsData)
+  }, currentUser);
+}
+
+export async function uploadCompanyLogoApi(file: File, currentUser?: User): Promise<{
+  success: boolean;
+  url: string;
+  message: string;
+}> {
+  const formData = new FormData();
+  formData.append('logo', file);
+  const headers: Record<string, string> = {};
+  if (currentUser) {
+    headers['x-user-id'] = currentUser.id;
+    headers['x-user-role'] = currentUser.role;
+    if (currentUser.companyId) headers['x-company-id'] = currentUser.companyId;
+  }
+  const response = await fetch('/api/upload/company-logo', {
+    method: 'POST',
+    headers,
+    body: formData
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || err.error || 'Failed to upload company logo.');
+  }
+  return response.json();
+}
+
+// 19. Payroll & Advance Synchronization
+export async function refreshPayrollSyncApi(monthYear: string, currentUser?: User): Promise<{
+  success: boolean;
+  message: string;
+  payrolls: Payroll[];
+}> {
+  return fetchApi('/api/payroll/refresh-sync', {
+    method: 'POST',
+    body: JSON.stringify({ monthYear })
+  }, currentUser);
+}
+
+
 
 
 

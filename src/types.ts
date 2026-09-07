@@ -10,6 +10,8 @@ export interface Company {
   companyCode: string; // e.g., 'BAW-001' or 'ZCON-005'
   company_code?: string; // alias support
   crNumber?: string; // Commercial Registration / Trade License Number
+  address?: string; // Location / Address
+  logoUrl?: string; // Custom uploaded company logo URL (Cloudinary or base64)
   adminName: string;
   adminEmail: string;
   planType: SubscriptionPlanType;
@@ -69,6 +71,7 @@ export interface User {
   joinedDate: string;
   // Labor Registration & Credentials & Bank Account
   iqamaId?: string;
+  iqamaIssueDate?: string; // YYYY-MM-DD
   iqamaExpiry?: string; // YYYY-MM-DD
   iqamaDocUrl?: string; // Cloudinary CDN URL for Iqama PDF/Scan
   passportNumber?: string;

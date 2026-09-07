@@ -163,7 +163,11 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             <div className="hidden xs:flex items-center gap-1.5 ml-1 sm:ml-2 pl-2 sm:pl-3 border-l border-slate-800 shrink-0">
               {currentUser.role === 'Labor' ? (
                 <div id="header-tenant-company-badge" className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-950/70 border border-emerald-500/40 rounded-xl text-emerald-300 font-extrabold text-xs shadow-inner">
-                  <Building2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  {tenantCompany?.logoUrl ? (
+                    <img src={tenantCompany.logoUrl} alt="Logo" className="w-4 h-4 rounded object-contain bg-white/20 shrink-0" />
+                  ) : (
+                    <Building2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  )}
                   <span className="truncate max-w-[130px] sm:max-w-[200px] md:max-w-[280px]">
                     <span className="text-emerald-400/80 font-normal text-[11px] hidden sm:inline">{t('workingAt', 'Working at')}: </span>
                     <span className="text-white font-black">{tenantCompany?.name || (currentUser as any)?.companyName || currentUser.companyId || 'Assigned Company'}</span>
@@ -178,7 +182,11 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 </div>
               ) : (
                 <div id="header-tenant-company-badge" className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-950/70 border border-indigo-500/40 rounded-xl text-indigo-200 font-extrabold text-xs shadow-inner">
-                  <Building2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                  {tenantCompany?.logoUrl ? (
+                    <img src={tenantCompany.logoUrl} alt="Logo" className="w-4 h-4 rounded object-contain bg-white/20 shrink-0" />
+                  ) : (
+                    <Building2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                  )}
                   <span className="truncate max-w-[130px] sm:max-w-[200px] md:max-w-[280px]">
                     <span className="text-indigo-300/80 font-normal text-[11px] hidden md:inline">{t('company', 'Company')}: </span>
                     <span className="text-white font-black">{tenantCompany?.name || (currentUser as any)?.companyName || currentUser.companyId || 'Registered Company'}</span>

@@ -39,26 +39,26 @@ export function getIqamaExpiryStatus(expiryDateStr?: string): IqamaStatusResult 
       badgeClass: 'bg-rose-600 text-white font-black animate-pulse shadow-xs',
       label: `EXPIRED (${Math.abs(daysLeft)} days ago)`
     };
-  } else if (daysLeft <= 5) {
+  } else if (daysLeft <= 15) {
     return {
       daysLeft,
       status: 'URGENT',
       badgeClass: 'bg-rose-500 text-white font-bold shadow-xs',
       label: `CRITICAL: ${daysLeft} days left`
     };
-  } else if (daysLeft <= 15) {
-    return {
-      daysLeft,
-      status: 'WARNING',
-      badgeClass: 'bg-amber-400 text-slate-950 font-black shadow-xs',
-      label: `WARNING: ${daysLeft} days left`
-    };
   } else if (daysLeft <= 30) {
     return {
       daysLeft,
+      status: 'WARNING',
+      badgeClass: 'bg-amber-500 text-slate-950 font-black shadow-xs',
+      label: `WARNING (≤30d): ${daysLeft} days left`
+    };
+  } else if (daysLeft <= 60) {
+    return {
+      daysLeft,
       status: 'NOTICE',
-      badgeClass: 'bg-amber-100 text-amber-900 border border-amber-300 font-bold',
-      label: `${daysLeft} days left`
+      badgeClass: 'bg-yellow-100 text-yellow-900 border border-yellow-400 font-bold',
+      label: `RENEWAL DUE (≤60d): ${daysLeft} days left`
     };
   } else {
     return {

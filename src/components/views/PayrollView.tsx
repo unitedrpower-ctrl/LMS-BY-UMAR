@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Payroll, User, Attendance, SystemSettings } from '../../types';
+import { Payroll, User, Attendance, SystemSettings, Company } from '../../types';
 import { useI18n } from '../../lib/i18n';
 import { UserAvatar } from '../UserAvatar';
 import { 
@@ -23,9 +23,12 @@ import {
   Coins,
   ShieldCheck,
   CheckSquare,
-  Square
+  Square,
+  RefreshCw,
+  Scissors,
+  ExternalLink
 } from 'lucide-react';
-import { downloadPayrollExcelApi } from '../../lib/api';
+import { downloadPayrollExcelApi, refreshPayrollSyncApi } from '../../lib/api';
 
 interface PayrollViewProps {
   payrolls: Payroll[];
@@ -35,6 +38,8 @@ interface PayrollViewProps {
   currentUserRole: string;
   currentUser?: User;
   settings?: SystemSettings;
+  tenantCompany?: Company | null;
+  onRefreshPayroll?: () => Promise<void>;
 }
 
 export const PayrollView: React.FC<PayrollViewProps> = ({
@@ -44,10 +49,14 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
   onSavePayroll,
   currentUserRole,
   currentUser,
-  settings
+  settings,
+  tenantCompany,
+  onRefreshPayroll
 }) => {
   const { t } = useI18n();
   const [selectedMonth, setSelectedMonth] = useState('2026-07');
+  const [isSyncingPayroll, setIsSyncingPayroll] = useState<boolean>(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [roleCategory, setRoleCategory] = useState<'Labor' | 'Staff' | 'All'>('Labor');
   const [selectedSponsor, setSelectedSponsor] = useState<string>('All');
   const [selectedPayrollIds, setSelectedPayrollIds] = useState<string[]>([]);
@@ -372,9 +381,35 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
         {(currentUserRole === 'Super Admin' || currentUserRole === 'HR Admin' || currentUserRole === 'Owner') && (
           <div className="flex items-center gap-2 flex-wrap">
             <button
+              id="btn-refresh-sync-payroll"
+              disabled={isSyncingPayroll}
+              onClick={async () => {
+                try {
+                  setIsSyncingPayroll(true);
+                  setSyncFeedback(null);
+                  await refreshPayrollSyncApi(selectedMonth, currentUser);
+                  if (onRefreshPayroll) {
+                    await onRefreshPayroll();
+                  }
+                  setSyncFeedback('✓ Payroll and advances synchronized & dynamically pushed to worker portals!');
+                  setTimeout(() => setSyncFeedback(null), 4000);
+                } catch (err: any) {
+                  alert(err.message || 'Failed to refresh payroll sync');
+                } finally {
+                  setIsSyncingPayroll(false);
+                }
+              }}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+              title="Recalculate advances, attendance, and push updated salary breakdown to worker portals"
+            >
+              <RefreshCw className={`w-4 h-4 text-white ${isSyncingPayroll ? 'animate-spin' : ''}`} />
+              {isSyncingPayroll ? 'Syncing Workers...' : 'Refresh Payroll Data'}
+            </button>
+
+            <button
               id="btn-export-excel-payroll"
               onClick={() => downloadPayrollExcelApi(selectedMonth, undefined, roleCategory)}
-              className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all border border-slate-700"
+              className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all border border-slate-700 cursor-pointer"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
               Export {roleCategory} Excel (.xlsx)
@@ -383,23 +418,35 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
             <button
               id="btn-print-bulk-payslips"
               onClick={() => setIsBulkPrintMode(true)}
-              className="px-3.5 py-2 bg-indigo-900 hover:bg-indigo-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all border border-indigo-700"
+              className="px-3.5 py-2 bg-indigo-900 hover:bg-indigo-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all border border-indigo-700 cursor-pointer"
             >
               <Printer className="w-4 h-4 text-indigo-300" />
-              Bulk Print Payslips
+              Bulk Print Payslips (2 / A4)
             </button>
 
             <button
               id="btn-auto-compile-payroll"
               onClick={handleCompileMonthlyPayrolls}
-              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all"
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
             >
-              <Calculator className="w-4 h-4" />
-              Compile {roleCategory} Sheet ({selectedMonth})
+              <Calculator className="w-4 h-4 text-amber-400" />
+              Compile {roleCategory} Sheet
             </button>
           </div>
         )}
       </div>
+
+      {syncFeedback && (
+        <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between shadow-xs animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{syncFeedback}</span>
+          </div>
+          <button onClick={() => setSyncFeedback(null)} className="text-emerald-700 hover:text-emerald-900">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Distinct Staff vs Labor Payroll Separation Tabs */}
       {!isLaborUser && (
@@ -700,18 +747,34 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
       {/* Individual Advanced Payslip Modal View with Fingerprint & Signature Boxes */}
       {activePayslip && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-slate-300 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 my-8">
+          <div className="bg-white border border-slate-300 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-4 my-8">
             <div className="flex items-center justify-between border-b-2 border-slate-900 pb-3">
-              <div className="flex items-center gap-2">
-                <Building2 className="w-6 h-6 text-slate-900" />
+              <div className="flex items-center gap-2.5">
+                {tenantCompany?.logoUrl ? (
+                  <img
+                    src={tenantCompany.logoUrl}
+                    alt="Company Logo"
+                    className="w-10 h-10 rounded-lg object-contain bg-white border border-slate-200 p-0.5 shrink-0"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="p-2 bg-slate-900 text-white rounded-xl">
+                    <Building2 className="w-6 h-6" />
+                  </div>
+                )}
                 <div>
-                  <h3 className="font-extrabold text-slate-900 text-base tracking-wide uppercase">OFFICIAL WORKFORCE PAYSLIP</h3>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Saudi Arabia • SAR Currency Statement</p>
+                  <h3 className="font-extrabold text-slate-900 text-base tracking-tight uppercase">
+                    {tenantCompany?.name || 'SITELABOR WORKFORCE'}
+                  </h3>
+                  <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
+                    <span>CR: <strong>{tenantCompany?.crNumber || '1010892741'}</strong></span>
+                    {tenantCompany?.address && <span>• {tenantCompany.address}</span>}
+                  </div>
                 </div>
               </div>
               <button
                 onClick={() => setActivePayslip(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 print:hidden"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 print:hidden cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -789,20 +852,20 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                   {/* Physical Box for Fingerprint / Thumb Impression and Signatures */}
                   <div className="pt-3 border-t border-slate-200 grid grid-cols-2 gap-4">
                     {/* Fingerprint Impression Box */}
-                    <div className="border-2 border-dashed border-slate-400 rounded-xl p-3 flex flex-col items-center justify-center text-center bg-slate-50 min-h-[100px]">
-                      <Fingerprint className="w-8 h-8 text-slate-400 mb-1" />
+                    <div className="border-2 border-dashed border-slate-400 rounded-xl p-3 flex flex-col items-center justify-center text-center bg-slate-50 min-h-[90px]">
+                      <Fingerprint className="w-7 h-7 text-slate-400 mb-1" />
                       <span className="text-[10px] font-bold text-slate-600 uppercase">Worker Thumb Impression</span>
-                      <span className="text-[9px] text-slate-400 italic">Attach physical fingerprint stamp</span>
+                      <span className="text-[9px] text-slate-400 italic">بصمة إبهام العامل</span>
                     </div>
 
                     {/* Signature Box */}
-                    <div className="border border-slate-300 rounded-xl p-3 flex flex-col justify-between bg-slate-50 min-h-[100px]">
+                    <div className="border border-slate-300 rounded-xl p-3 flex flex-col justify-between bg-slate-50 min-h-[90px]">
                       <div>
                         <span className="text-[10px] font-bold text-slate-600 uppercase block">Worker Acknowledgement</span>
-                        <p className="text-[9px] text-slate-400">I confirm receipt of full cash/bank salary.</p>
+                        <p className="text-[9px] text-slate-400">Received full SAR payment.</p>
                       </div>
 
-                      <div className="border-t border-slate-400 pt-1 mt-4">
+                      <div className="border-t border-slate-400 pt-1 mt-2">
                         <span className="text-[9px] font-mono text-slate-500 block text-center">Authorized HR Signature & Seal</span>
                       </div>
                     </div>
@@ -814,7 +877,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
             <div className="pt-2 flex justify-end gap-2 print:hidden">
               <button
                 onClick={() => window.print()}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
               >
                 <Printer className="w-4 h-4" /> Print Physical Payslip
               </button>
@@ -823,105 +886,199 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
         </div>
       )}
 
-      {/* Bulk Print Modal Layout */}
+      {/* Bulk Print Modal Layout: Exactly 2 Payslips per A4 Page in Portrait */}
       {isBulkPrintMode && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-slate-300 rounded-2xl w-full max-w-4xl shadow-2xl p-6 space-y-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-4 print:hidden">
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static">
+          {/* Print Stylesheet for 2 Slips Per A4 Page */}
+          <style>{`
+            @media print {
+              @page {
+                size: A4 portrait;
+                margin: 6mm 8mm 6mm 8mm;
+              }
+              body * {
+                visibility: hidden;
+              }
+              #printable-bulk-a4-slips, #printable-bulk-a4-slips * {
+                visibility: visible;
+              }
+              #printable-bulk-a4-slips {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                margin: 0;
+                padding: 0;
+                background: white !important;
+              }
+              .a4-payslip-item {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                height: 133mm !important;
+                max-height: 135mm !important;
+                box-sizing: border-box !important;
+                border: 1.5px solid #1e293b !important;
+                margin-bottom: 4mm !important;
+                padding: 4mm 6mm !important;
+              }
+              .a4-page-break {
+                page-break-after: always !important;
+                break-after: page !important;
+              }
+              .no-print {
+                display: none !important;
+              }
+            }
+          `}</style>
+
+          <div className="bg-white border border-slate-300 rounded-2xl w-full max-w-4xl shadow-2xl p-4 sm:p-6 space-y-4 max-h-[92vh] overflow-y-auto print:max-h-none print:shadow-none print:border-none print:p-0">
+            {/* Header controls (hidden when printing) */}
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3 print:hidden no-print">
               <div>
-                <h3 className="font-bold text-slate-900 text-lg">Bulk Payslip Printer ({roleCategory} Payroll - {selectedMonth})</h3>
-                <p className="text-xs text-slate-500">Printing all {monthPayrolls.length} payslips with thumb impression & signature boxes.</p>
+                <h3 className="font-bold text-slate-900 text-base sm:text-lg flex items-center gap-2">
+                  <Printer className="w-5 h-5 text-indigo-600" />
+                  Bulk Payslip Printer (Dual A4 Layout)
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Formatted for <strong>2 salary slips per A4 page</strong> in portrait orientation with company branding and thumb impression stamps.
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => window.print()}
-                  className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md cursor-pointer"
                 >
-                  <Printer className="w-4 h-4" /> Execute Print All
+                  <Printer className="w-4 h-4" /> Print All ({monthPayrolls.length} Slips)
                 </button>
-                <button onClick={() => setIsBulkPrintMode(false)} className="p-1 text-slate-400 hover:text-slate-600">
+                <button onClick={() => setIsBulkPrintMode(false)} className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer">
                   <X className="w-6 h-6" />
                 </button>
               </div>
             </div>
 
-            <div className="space-y-8">
+            {/* Printable Container */}
+            <div id="printable-bulk-a4-slips" className="space-y-4 print:space-y-0">
               {monthPayrolls.map((p, idx) => {
                 const worker = users.find((u) => u.id === p.userId);
+                const isEvenSlip = idx % 2 === 1; // 2nd slip on this page
 
                 return (
-                  <div key={p.id} className="p-6 border-2 border-slate-300 rounded-2xl space-y-4 bg-white page-break-after-always">
-                    <div className="flex items-center justify-between border-b-2 border-slate-900 pb-2">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="w-5 h-5 text-slate-900" />
-                        <span className="font-extrabold text-slate-900 text-sm tracking-wide uppercase">SITELABOR WORKFORCE OFFICIAL PAYSLIP</span>
+                  <React.Fragment key={p.id}>
+                    <div className={`a4-payslip-item bg-white rounded-xl border-2 border-slate-300 p-4 space-y-2.5 shadow-xs ${isEvenSlip ? 'a4-page-break' : ''}`}>
+                      {/* Top Branding & Slip Title */}
+                      <div className="flex items-center justify-between border-b-2 border-slate-900 pb-1.5">
+                        <div className="flex items-center gap-2.5">
+                          {tenantCompany?.logoUrl ? (
+                            <img
+                              src={tenantCompany.logoUrl}
+                              alt="Logo"
+                              className="w-8 h-8 rounded object-contain bg-white border border-slate-200 p-0.5 shrink-0"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="p-1.5 bg-slate-900 text-white rounded-lg">
+                              <Building2 className="w-4 h-4" />
+                            </div>
+                          )}
+                          <div>
+                            <h4 className="font-black text-xs sm:text-sm uppercase tracking-tight text-slate-900 leading-tight">
+                              {tenantCompany?.name || 'SITELABOR WORKFORCE OFFICIAL PAYSLIP'}
+                            </h4>
+                            <div className="flex items-center gap-2 text-[9px] text-slate-500 font-mono">
+                              <span>CR: <strong>{tenantCompany?.crNumber || '1010892741'}</strong></span>
+                              {tenantCompany?.address && <span className="hidden sm:inline">• {tenantCompany.address}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-mono text-[10px] font-bold text-indigo-700 block">
+                            Period: {p.monthYear}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-mono">Slip #{idx + 1}</span>
+                        </div>
                       </div>
-                      <span className="font-mono text-xs font-bold text-indigo-700">Sheet #{idx + 1} | Period: {p.monthYear}</span>
-                    </div>
 
-                    <div className="grid grid-cols-4 gap-2 text-xs bg-slate-50 p-3 rounded-xl border border-slate-200">
-                      <div>
-                        <span className="text-[10px] text-slate-400 block font-bold uppercase">Name</span>
-                        <p className="font-bold text-slate-900">{worker?.name}</p>
+                      {/* Worker Metadata Grid */}
+                      <div className="grid grid-cols-4 gap-2 text-[11px] bg-slate-50 p-2 rounded-lg border border-slate-200">
+                        <div>
+                          <span className="text-[9px] text-slate-400 block font-bold uppercase">Name</span>
+                          <p className="font-bold text-slate-900 truncate">{worker?.name}</p>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-slate-400 block font-bold uppercase">Role</span>
+                          <p className="font-semibold text-slate-800 truncate">{worker?.designation || worker?.role}</p>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-slate-400 block font-bold uppercase">Iqama ID</span>
+                          <p className="font-mono font-bold text-indigo-700 truncate">{worker?.iqamaId || '2549102938'}</p>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-slate-400 block font-bold uppercase">Sponsor / Kafeel</span>
+                          <p className="font-semibold text-slate-800 truncate">{worker?.sponsorName || 'Direct Hire'}</p>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block font-bold uppercase">Role</span>
-                        <p className="font-semibold text-slate-800">{worker?.designation}</p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block font-bold uppercase">Iqama ID</span>
-                        <p className="font-mono font-bold text-indigo-700">{worker?.iqamaId || '2549102938'}</p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block font-bold uppercase">Sponsor / Kafeel</span>
-                        <p className="font-semibold text-slate-800">{worker?.sponsorName || 'Direct Hire'}</p>
-                      </div>
-                    </div>
 
-                    <div className="space-y-1.5 text-xs">
-                      <div className="flex justify-between py-1 border-b border-slate-200">
-                        <span>Base Rate × Days Worked ({p.totalDaysWorked} Days)</span>
-                        <span className="font-mono font-bold">SAR {(p.dailyRate * p.totalDaysWorked).toFixed(2)}</span>
+                      {/* Line Items Breakdown (Compact for 2 per A4) */}
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] border-b border-slate-200 pb-2">
+                        <div className="flex justify-between py-0.5 border-b border-slate-100">
+                          <span className="text-slate-600">Base Wage ({p.totalDaysWorked}d @ SAR {p.dailyRate})</span>
+                          <span className="font-mono font-bold">SAR {(p.dailyRate * p.totalDaysWorked).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between py-0.5 border-b border-slate-100 text-indigo-700">
+                          <span>Friday Paid Wage</span>
+                          <span className="font-mono font-bold">+SAR {(p.fridayPay || (p.dailyRate * 4)).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between py-0.5 border-b border-slate-100 text-amber-700">
+                          <span>Gov Holiday Wage</span>
+                          <span className="font-mono font-bold">+SAR {(p.govHolidayPay || p.dailyRate).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between py-0.5 border-b border-slate-100 text-purple-700">
+                          <span>Overtime Work Pay</span>
+                          <span className="font-mono font-bold">+SAR {(p.overtimePay || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between py-0.5 border-b border-slate-100 text-emerald-700">
+                          <span>Site Allowances</span>
+                          <span className="font-mono font-bold">+SAR {p.allowances.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between py-0.5 border-b border-slate-100 text-rose-700">
+                          <span>Advances & Penalties</span>
+                          <span className="font-mono font-bold">-SAR {(p.advances + p.penalties + (p.absenceDeduction || 0)).toFixed(2)}</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between py-1 border-b border-slate-200 text-indigo-700">
-                        <span>Friday Paid Holiday Wage</span>
-                        <span className="font-mono font-bold">+SAR {(p.fridayPay || (p.dailyRate * 4)).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-slate-200 text-amber-700">
-                        <span>Government Holiday Wage</span>
-                        <span className="font-mono font-bold">+SAR {(p.govHolidayPay || p.dailyRate).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-slate-200 text-purple-700">
-                        <span>Overtime Work Pay</span>
-                        <span className="font-mono font-bold">+SAR {(p.overtimePay || 0).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-slate-200 text-emerald-700">
-                        <span>Food & Travel Allowances</span>
-                        <span className="font-mono font-bold">+SAR {p.allowances.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-slate-200 text-rose-700">
-                        <span>Advances & Absence Penalties</span>
-                        <span className="font-mono font-bold">-SAR {(p.advances + p.penalties + (p.absenceDeduction || 0)).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between py-2 border-t-2 border-slate-900 font-black text-slate-900 bg-slate-100 px-3 rounded-lg text-sm">
-                        <span>NET CASH SALARY PAID</span>
-                        <span className="text-emerald-700 font-mono">SAR {p.netSalary.toFixed(2)}</span>
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-4 pt-2">
-                      <div className="border-2 border-dashed border-slate-400 rounded-xl p-3 text-center bg-slate-50 min-h-[90px] flex flex-col justify-center items-center">
-                        <Fingerprint className="w-6 h-6 text-slate-400 mb-1" />
-                        <span className="text-[10px] font-bold text-slate-600 uppercase">Worker Thumb Impression</span>
+                      {/* Net Total */}
+                      <div className="flex justify-between items-center bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-black">
+                        <span>NET CASH SALARY PAYABLE (صافي الراتب المستحق)</span>
+                        <span className="text-emerald-400 font-mono text-sm">SAR {p.netSalary.toFixed(2)}</span>
                       </div>
-                      <div className="border border-slate-300 rounded-xl p-3 bg-slate-50 min-h-[90px] flex flex-col justify-between">
-                        <span className="text-[10px] font-bold text-slate-600 uppercase">Worker Signature</span>
-                        <div className="border-t border-slate-400 pt-1 text-[9px] font-mono text-center text-slate-500">
-                          Authorized Management Signature
+
+                      {/* Dual Box: Thumb Impression & Signature */}
+                      <div className="grid grid-cols-2 gap-3 pt-1">
+                        <div className="border border-dashed border-slate-400 rounded-lg p-1.5 text-center bg-slate-50 min-h-[52px] flex flex-col justify-center items-center">
+                          <Fingerprint className="w-4 h-4 text-slate-400" />
+                          <span className="text-[8px] font-bold text-slate-600 uppercase">Worker Thumb Impression (بصمة العامل)</span>
+                        </div>
+                        <div className="border border-slate-300 rounded-lg p-1.5 bg-slate-50 min-h-[52px] flex flex-col justify-between">
+                          <span className="text-[8px] font-bold text-slate-600 uppercase">Authorized Signature & Seal</span>
+                          <div className="border-t border-slate-300 pt-0.5 text-[8px] font-mono text-center text-slate-500">
+                            Management Sign / ختم الإدارة
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+
+                    {/* Scissor Cut Line (shown between slip 1 and 2 on screen and print) */}
+                    {!isEvenSlip && idx < monthPayrolls.length - 1 && (
+                      <div className="flex items-center gap-2 my-2 py-1 text-slate-400 select-none">
+                        <div className="flex-1 border-t border-dashed border-slate-300"></div>
+                        <div className="flex items-center gap-1 text-[9px] font-mono uppercase tracking-widest text-slate-400">
+                          <Scissors className="w-3 h-3" />
+                          <span>Cut Here / خط القص</span>
+                        </div>
+                        <div className="flex-1 border-t border-dashed border-slate-300"></div>
+                      </div>
+                    )}
+                  </React.Fragment>
                 );
               })}
             </div>

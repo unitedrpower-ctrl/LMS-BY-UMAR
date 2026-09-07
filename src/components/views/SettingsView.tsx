@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserAvatar } from '../UserAvatar';
 import { 
   Settings as SettingsIcon, 
@@ -14,15 +14,28 @@ import {
   Lock, 
   UserPlus, 
   Eye, 
-  EyeOff,
-  Briefcase,
-  Plus,
-  Trash2,
-  FileSpreadsheet,
-  Coins
+  EyeOff, 
+  Briefcase, 
+  Plus, 
+  Trash2, 
+  FileSpreadsheet, 
+  Coins,
+  Building2,
+  Upload,
+  Image as ImageIcon,
+  MapPin,
+  FileText,
+  Phone,
+  ExternalLink,
+  Printer
 } from 'lucide-react';
-import { SystemSettings, User, AdminPermissions, GovHoliday } from '../../types';
-import { downloadLaborCredentialsExcelApi } from '../../lib/api';
+import { SystemSettings, User, AdminPermissions, GovHoliday, Company } from '../../types';
+import { 
+  downloadLaborCredentialsExcelApi,
+  getTenantCompanyApi,
+  updateTenantCompanySettingsApi,
+  uploadCompanyLogoApi
+} from '../../lib/api';
 
 interface SettingsViewProps {
   settings: SystemSettings;
@@ -30,6 +43,8 @@ interface SettingsViewProps {
   users: User[];
   onSaveUser: (updatedUser: User) => void;
   currentUser: User;
+  tenantCompany?: Company | null;
+  onUpdateTenantCompany?: (company: Company) => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -37,11 +52,102 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onSaveSettings,
   users,
   onSaveUser,
-  currentUser
+  currentUser,
+  tenantCompany,
+  onUpdateTenantCompany
 }) => {
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'company' | 'policies' | 'rbac'>('company');
   const [localSettings, setLocalSettings] = useState<SystemSettings>(settings);
   const [savedSuccessMessage, setSavedSuccessMessage] = useState<string | null>(null);
   const [isExportingExcel, setIsExportingExcel] = useState<boolean>(false);
+
+  // Company Settings & Branding state
+  const [companyForm, setCompanyForm] = useState<{
+    name: string;
+    crNumber: string;
+    address: string;
+    contactPhone: string;
+    logoUrl: string;
+  }>({
+    name: tenantCompany?.name || '',
+    crNumber: tenantCompany?.crNumber || '',
+    address: tenantCompany?.address || '',
+    contactPhone: tenantCompany?.contactPhone || '',
+    logoUrl: tenantCompany?.logoUrl || ''
+  });
+  const [isUploadingLogo, setIsUploadingLogo] = useState<boolean>(false);
+  const [isSavingCompany, setIsSavingCompany] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (tenantCompany) {
+      setCompanyForm({
+        name: tenantCompany.name || '',
+        crNumber: tenantCompany.crNumber || '',
+        address: tenantCompany.address || '',
+        contactPhone: tenantCompany.contactPhone || '',
+        logoUrl: tenantCompany.logoUrl || ''
+      });
+    } else {
+      getTenantCompanyApi(currentUser).then(data => {
+        if (data && data.company) {
+          const c = data.company;
+          setCompanyForm({
+            name: c.name || '',
+            crNumber: c.crNumber || '',
+            address: c.address || '',
+            contactPhone: c.contactPhone || '',
+            logoUrl: c.logoUrl || ''
+          });
+          onUpdateTenantCompany?.(c);
+        }
+      }).catch(() => {});
+    }
+  }, [tenantCompany, currentUser]);
+
+  const handleLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Instant local preview
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setCompanyForm(prev => ({ ...prev, logoUrl: reader.result as string }));
+      }
+    };
+    reader.readAsDataURL(file);
+
+    try {
+      setIsUploadingLogo(true);
+      const res = await uploadCompanyLogoApi(file, currentUser);
+      if (res && res.url) {
+        setCompanyForm(prev => ({ ...prev, logoUrl: res.url }));
+        setSavedSuccessMessage('Company logo uploaded successfully!');
+        setTimeout(() => setSavedSuccessMessage(null), 3000);
+      }
+    } catch (err: any) {
+      console.warn("Logo upload failed:", err.message);
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const handleSaveCompanySettings = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    try {
+      setIsSavingCompany(true);
+      const res = await updateTenantCompanySettingsApi(companyForm, currentUser);
+      if (res && res.company && onUpdateTenantCompany) {
+        onUpdateTenantCompany(res.company);
+      }
+      setSavedSuccessMessage('Company Settings, CR & Branding updated successfully!');
+      setTimeout(() => setSavedSuccessMessage(null), 3500);
+    } catch (err: any) {
+      alert(err.message || 'Failed to save company settings');
+    } finally {
+      setIsSavingCompany(false);
+    }
+  };
 
   // New Gov Holiday form state
   const [newGovDate, setNewGovDate] = useState<string>('');
@@ -172,7 +278,252 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       )}
 
-      {/* Grid Section 1: Government Holidays & Payroll Rules */}
+      {/* Settings Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 flex-wrap">
+        <button
+          type="button"
+          onClick={() => setActiveSettingsTab('company')}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+            activeSettingsTab === 'company'
+              ? 'bg-indigo-600 text-white shadow-md'
+              : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+          }`}
+        >
+          <Building2 className="w-4 h-4" />
+          Company Profile & Logo Branding
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSettingsTab('policies')}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+            activeSettingsTab === 'policies'
+              ? 'bg-indigo-600 text-white shadow-md'
+              : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+          }`}
+        >
+          <Calendar className="w-4 h-4" />
+          Government Holidays & Wage Rules
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSettingsTab('rbac')}
+          className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+            activeSettingsTab === 'rbac'
+              ? 'bg-indigo-600 text-white shadow-md'
+              : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+          }`}
+        >
+          <Key className="w-4 h-4" />
+          Worker Credentials & RBAC
+        </button>
+      </div>
+
+      {/* TAB 1: COMPANY PROFILE, CR & DYNAMIC LOGO BRANDING */}
+      {activeSettingsTab === 'company' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Company Form */}
+          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-100">
+                  <Building2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Company Settings & Trade Registration</h3>
+                  <p className="text-xs text-slate-500">
+                    Set your Commercial Registration (CR), Address, and Official Logo for automatic branding across all reports & payslips.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveCompanySettings} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Company Registered Legal Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={companyForm.name}
+                    onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })}
+                    placeholder="e.g. Al-Bawardi Contracting & Construction"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Commercial Registration (CR) Number *</label>
+                  <div className="relative">
+                    <FileText className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                    <input
+                      type="text"
+                      required
+                      value={companyForm.crNumber}
+                      onChange={(e) => setCompanyForm({ ...companyForm, crNumber: e.target.value })}
+                      placeholder="e.g. 1010892741"
+                      className="w-full pl-9 pr-3.5 py-2.5 border border-slate-200 rounded-xl font-mono font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Official Company / Headquarters Address</label>
+                  <div className="relative">
+                    <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                    <input
+                      type="text"
+                      value={companyForm.address}
+                      onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })}
+                      placeholder="e.g. King Fahd Road, Al-Olaya, Riyadh, Saudi Arabia"
+                      className="w-full pl-9 pr-3.5 py-2.5 border border-slate-200 rounded-xl font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Official Contact Phone</label>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                    <input
+                      type="text"
+                      value={companyForm.contactPhone}
+                      onChange={(e) => setCompanyForm({ ...companyForm, contactPhone: e.target.value })}
+                      placeholder="e.g. +966 11 482 9900"
+                      className="w-full pl-9 pr-3.5 py-2.5 border border-slate-200 rounded-xl font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic Logo Upload Section */}
+              <div className="pt-2">
+                <label className="block font-bold text-slate-700 mb-1.5">Official Company Logo (Displays on Header & Payslips)</label>
+                <div className="border-2 border-dashed border-slate-300 rounded-2xl p-4 bg-slate-50 flex flex-col sm:flex-row items-center gap-4">
+                  <div className="w-20 h-20 rounded-xl bg-white border border-slate-200 p-1 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
+                    {companyForm.logoUrl ? (
+                      <img
+                        src={companyForm.logoUrl}
+                        alt="Company Logo Preview"
+                        className="w-full h-full object-contain"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <Building2 className="w-8 h-8 text-slate-300" />
+                    )}
+                  </div>
+
+                  <div className="flex-1 space-y-1 text-center sm:text-left">
+                    <div className="flex items-center gap-2 justify-center sm:justify-start">
+                      <label className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer inline-flex items-center gap-1.5 shadow-xs transition-all">
+                        <Upload className="w-3.5 h-3.5" />
+                        {isUploadingLogo ? 'Uploading...' : 'Choose Logo Image'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleLogoFileChange}
+                          disabled={isUploadingLogo}
+                        />
+                      </label>
+                      {companyForm.logoUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setCompanyForm({ ...companyForm, logoUrl: '' })}
+                          className="px-2.5 py-2 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-semibold cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Supports PNG, JPG, SVG, or WEBP up to 5MB. Rendered directly on A4 Payslip headers and the navigation bar.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button
+                  type="submit"
+                  disabled={isSavingCompany}
+                  className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-md transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4 text-emerald-400" />
+                  {isSavingCompany ? 'Saving Settings...' : 'Save Company Profile & Branding'}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Live Document & Payslip Branding Preview */}
+          <div className="bg-slate-900 text-slate-100 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+              <Printer className="w-5 h-5 text-indigo-400" />
+              <div>
+                <h4 className="font-bold text-sm text-white">Live Payslip Branding Preview</h4>
+                <p className="text-[11px] text-slate-400">How your company branding appears on official A4 prints</p>
+              </div>
+            </div>
+
+            {/* Mock Print Slip Header */}
+            <div className="bg-white text-slate-900 rounded-xl p-4 shadow-sm border border-slate-200 space-y-2">
+              <div className="flex items-start justify-between gap-3 border-b-2 border-slate-900 pb-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center p-1 shrink-0 overflow-hidden">
+                    {companyForm.logoUrl ? (
+                      <img src={companyForm.logoUrl} alt="Logo" className="w-full h-full object-contain" />
+                    ) : (
+                      <Building2 className="w-6 h-6 text-slate-400" />
+                    )}
+                  </div>
+                  <div>
+                    <h5 className="font-black text-xs uppercase tracking-tight text-slate-900">
+                      {companyForm.name || 'YOUR COMPANY NAME'}
+                    </h5>
+                    <p className="text-[10px] text-slate-600 font-mono">
+                      C.R. No: <strong>{companyForm.crNumber || '1010XXXXXX'}</strong>
+                    </p>
+                    <p className="text-[9px] text-slate-500 truncate max-w-[200px]">
+                      {companyForm.address || 'Kingdom of Saudi Arabia'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="px-2 py-0.5 bg-slate-900 text-white font-mono font-bold text-[9px] rounded uppercase">
+                    Official Payslip
+                  </span>
+                  <p className="text-[9px] text-indigo-700 font-bold mt-1">2 Per A4 Page</p>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-500 italic pt-1">
+                ✓ Verified Saudi labor payroll template with Thumb Impression & Kafeel details.
+              </p>
+            </div>
+
+            <div className="space-y-2 text-xs pt-1 text-slate-300">
+              <div className="flex items-center gap-2">
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Synchronized with Header Bar Badge</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Embedded into Bulk A4 Dual Payslip Printouts</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Displayed in Worker Mobile & Desktop Portals</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: GOVERNMENT HOLIDAYS & WAGE RULES */}
+      {activeSettingsTab === 'policies' && (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
         {/* 1. Government Holidays Management (Requirement 1) */}
@@ -354,9 +705,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
       </div>
+      )}
 
-      {/* Section 2: Granular Admin Role & Permission Management (RBAC) */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      {/* TAB 3: WORKER CREDENTIALS & GRANULAR RBAC */}
+      {activeSettingsTab === 'rbac' && (
+      <div className="space-y-6">
+        {/* Section 2: Granular Admin Role & Permission Management (RBAC) */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2">
             <div className="p-2 bg-slate-900 text-white rounded-xl">
@@ -545,6 +900,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           ))}
         </div>
       </div>
+      </div>
+      )}
     </div>
   );
 };

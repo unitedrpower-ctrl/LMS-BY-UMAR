@@ -200,6 +200,7 @@ export const UsersView: React.FC<UsersViewProps> = ({
     const randomId = Math.floor(1000 + Math.random() * 9000);
 
     onSaveUser({
+      ...editingUser,
       id: editingUser.id || `usr-${Date.now()}`,
       name: editingUser.name,
       email: editingUser.email,
@@ -211,7 +212,13 @@ export const UsersView: React.FC<UsersViewProps> = ({
       joinedDate: editingUser.joinedDate || new Date().toISOString().split('T')[0],
       avatar: editingUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
       iqamaId: editingUser.iqamaId || `${Math.floor(2000000000 + Math.random() * 900000000)}`,
+      iqamaIssueDate: editingUser.iqamaIssueDate,
+      iqamaExpiry: editingUser.iqamaExpiry,
+      iqamaDocUrl: editingUser.iqamaDocUrl,
+      sponsorName: editingUser.sponsorName,
       passportNumber: editingUser.passportNumber || `P${randomId}`,
+      passportDocUrl: editingUser.passportDocUrl,
+      contractDocUrl: editingUser.contractDocUrl,
       loginSerial: editingUser.loginSerial || `EMP-${randomId}`,
       loginPassword: editingUser.loginPassword || `Pass#${randomId}`,
       bankName: editingUser.bankName,
@@ -762,10 +769,29 @@ export const UsersView: React.FC<UsersViewProps> = ({
                     onChange={(e) => setEditingUser({ ...editingUser, iqamaExpiry: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold text-slate-800"
                   />
+                  {editingUser.iqamaExpiry && (() => {
+                    const st = getIqamaExpiryStatus(editingUser.iqamaExpiry);
+                    return (
+                      <div className={`mt-1.5 px-2 py-1 rounded-md text-[11px] font-bold flex items-center justify-between ${st.badgeClass}`}>
+                        <span>{st.label}</span>
+                        <span className="text-[10px] uppercase font-mono">{st.status}</span>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Iqama Issue Date</label>
+                  <input
+                    type="date"
+                    value={editingUser.iqamaIssueDate || ''}
+                    onChange={(e) => setEditingUser({ ...editingUser, iqamaIssueDate: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-slate-800"
+                  />
+                </div>
+
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Sponsor Name / Kafeel *</label>
                   <input
@@ -776,7 +802,9 @@ export const UsersView: React.FC<UsersViewProps> = ({
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl"
                   />
                 </div>
+              </div>
 
+              <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Passport Number</label>
                   <input

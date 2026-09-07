@@ -92,17 +92,36 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [otpCountdown, setOtpCountdown] = useState(0);
 
-  // Route and Hash Listeners for /master-login
+  // Check if current URL matches the hidden Master Owner authentication route
+  const checkIsMasterHiddenRoute = () => {
+    const path = window.location.pathname.toLowerCase();
+    const hash = window.location.hash.toLowerCase();
+    const search = window.location.search.toLowerCase();
+    return (
+      path === '/owner' ||
+      path.startsWith('/owner/') ||
+      path === '/master' ||
+      path.startsWith('/master/') ||
+      path === '/master-login' ||
+      path.startsWith('/master-login/') ||
+      hash === '#owner' ||
+      hash.startsWith('#owner') ||
+      hash === '#master' ||
+      hash.startsWith('#master') ||
+      hash.includes('master-login') ||
+      search.includes('owner=true') ||
+      search.includes('master=true')
+    );
+  };
+
+  const [isMasterPath, setIsMasterPath] = useState<boolean>(() => checkIsMasterHiddenRoute());
+
+  // Route and Hash Listeners for hidden /owner and /master routes
   useEffect(() => {
     const handleRouteCheck = () => {
-      if (
-        window.location.pathname.includes('/master-login') || 
-        window.location.pathname.includes('/master') ||
-        window.location.hash.includes('master-login') ||
-        window.location.hash.includes('master') ||
-        window.location.search.includes('master=true') ||
-        window.location.search.includes('owner=true')
-      ) {
+      const isMaster = checkIsMasterHiddenRoute();
+      setIsMasterPath(isMaster);
+      if (isMaster) {
         setActiveTab('masterOtp');
       }
     };
@@ -1139,24 +1158,26 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
             <>
               {/* Tab Selector Switcher */}
               {activeTab !== 'forgotPassword' && activeTab !== 'resetPassword' && (
-                <div className="grid grid-cols-4 gap-1 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold">
+                <div className={`grid ${isMasterPath || activeTab === 'masterOtp' ? 'grid-cols-4' : 'grid-cols-3'} gap-1 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold`}>
 
-                  <button
-                    id="tab-btn-master-owner"
-                    onClick={() => {
-                      setActiveTab('masterOtp');
-                      setErrorMessage('');
-                      setSuccessMessage('');
-                      window.location.hash = '#master-login';
-                    }}
-                    className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                      activeTab === 'masterOtp'
-                        ? 'bg-gradient-to-r from-amber-600 to-yellow-600 text-white shadow-md font-black ring-1 ring-amber-400/50'
-                        : 'text-amber-400 hover:text-amber-200 hover:bg-slate-900'
-                    }`}
-                  >
-                    <Crown className="w-3.5 h-3.5 text-amber-200" /> Platform Owner
-                  </button>
+                  {/* Platform Owner tab only visible when explicitly accessing hidden /owner or /master URL */}
+                  {(isMasterPath || activeTab === 'masterOtp') && (
+                    <button
+                      id="tab-btn-master-owner"
+                      onClick={() => {
+                        setActiveTab('masterOtp');
+                        setErrorMessage('');
+                        setSuccessMessage('');
+                      }}
+                      className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                        activeTab === 'masterOtp'
+                          ? 'bg-gradient-to-r from-amber-600 to-yellow-600 text-white shadow-md font-black ring-1 ring-amber-400/50'
+                          : 'text-amber-400 hover:text-amber-200 hover:bg-slate-900'
+                      }`}
+                    >
+                      <Crown className="w-3.5 h-3.5 text-amber-200" /> Platform Owner
+                    </button>
+                  )}
 
                   <button
                     id="tab-btn-admin-login"
@@ -1204,27 +1225,6 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                     }`}
                   >
                     <UserPlus className="w-3.5 h-3.5 text-emerald-200" /> Sign Up
-                  </button>
-                </div>
-              )}
-
-              {/* Distinct Master Owner Dedicated Login Toggle Link */}
-              {activeTab !== 'masterOtp' && activeTab !== 'forgotPassword' && activeTab !== 'resetPassword' && (
-                <div className="pt-1 flex justify-center">
-                  <button
-                    type="button"
-                    id="link-switch-master-login"
-                    onClick={() => {
-                      setActiveTab('masterOtp');
-                      setErrorMessage('');
-                      setSuccessMessage('');
-                      window.location.hash = '#master-login';
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 rounded-full text-xs font-bold transition-all cursor-pointer group"
-                  >
-                    <Crown className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
-                    <span>Platform Master Owner? <span className="underline decoration-amber-400 font-extrabold">Platform Owner Login</span></span>
-                    <ArrowRight className="w-3 h-3 text-amber-400 group-hover:translate-x-0.5 transition-transform" />
                   </button>
                 </div>
               )}
@@ -1359,6 +1359,20 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                     <span>
                       Requires 2FA Brevo approval code verification. Direct route bypasses company code requirements.
                     </span>
+                  </div>
+
+                  <div className="text-center pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab('adminLogin');
+                        setIsMasterPath(false);
+                        window.history.replaceState({}, '', '/');
+                      }}
+                      className="text-slate-500 hover:text-slate-300 font-semibold text-xs transition-colors cursor-pointer"
+                    >
+                      ← Return to Standard Company Login
+                    </button>
                   </div>
 
                   {activeOtpSent && (

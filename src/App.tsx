@@ -509,6 +509,18 @@ export default function App() {
     }
   };
 
+  const handleRefreshPayroll = async () => {
+    if (!currentUser) return;
+    try {
+      const fresh = await getPayrollApi(currentUser);
+      if (fresh && Array.isArray(fresh)) {
+        setPayrolls(fresh);
+      }
+    } catch (e: any) {
+      console.warn("Failed to fetch fresh payroll records:", e.message);
+    }
+  };
+
   const handleSavePayroll = (payroll: Payroll) => {
     setPayrolls((prev) => {
       const idx = prev.findIndex((p) => p.id === payroll.id || (p.userId === payroll.userId && p.monthYear === payroll.monthYear));
@@ -695,6 +707,8 @@ export default function App() {
             currentUserRole={currentUser.role}
             currentUser={currentUser}
             settings={settings}
+            tenantCompany={tenantCompany}
+            onRefreshPayroll={handleRefreshPayroll}
           />
         );
       case 'complaints':
@@ -755,6 +769,8 @@ export default function App() {
             users={users}
             onSaveUser={handleSaveUser}
             currentUser={currentUser}
+            tenantCompany={tenantCompany}
+            onUpdateTenantCompany={setTenantCompany}
           />
         );
       case 'security':
