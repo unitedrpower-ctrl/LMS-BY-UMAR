@@ -39,6 +39,7 @@ import {
   saveSiteApi,
   deleteSiteApi,
   getAttendanceApi, 
+  bulkUpdateAttendanceApi,
   getPayrollApi, 
   getComplaintsApi, 
   getNoticesApi, 
@@ -392,7 +393,7 @@ export default function App() {
     }
   };
 
-  const handleSaveAttendanceRecords = (records: Attendance[]) => {
+  const handleSaveAttendanceRecords = async (records: Attendance[]) => {
     setAttendance((prev) => {
       const copy = [...prev];
       records.forEach((rec) => {
@@ -405,6 +406,12 @@ export default function App() {
       });
       return copy;
     });
+
+    try {
+      await bulkUpdateAttendanceApi(records, currentUser || undefined);
+    } catch (e: any) {
+      console.warn("Backend bulk update attendance failed or offline:", e.message);
+    }
 
     // AUTOMATED RECALCULATION OF MONTHLY SALARY UPON ATTENDANCE UPDATE
     records.forEach((rec) => {
@@ -456,6 +463,18 @@ export default function App() {
         return [...prevPayrolls, updated];
       });
     });
+  };
+
+  const handleRefreshAttendance = async () => {
+    if (!currentUser) return;
+    try {
+      const fresh = await getAttendanceApi(currentUser);
+      if (fresh && Array.isArray(fresh)) {
+        setAttendance(fresh);
+      }
+    } catch (e: any) {
+      console.warn("Failed to fetch fresh attendance records:", e.message);
+    }
   };
 
   const handleSavePayroll = (payroll: Payroll) => {
@@ -609,6 +628,7 @@ export default function App() {
             complaints={complaints}
             notices={notices}
             setActiveTab={setActiveTab}
+            onRefreshAttendance={handleRefreshAttendance}
           />
         );
       case 'sites':
@@ -630,6 +650,7 @@ export default function App() {
             currentUser={currentUser}
             onSaveAttendance={handleSaveAttendanceRecords}
             payrolls={payrolls}
+            onRefreshAttendance={handleRefreshAttendance}
           />
         );
       case 'payroll':

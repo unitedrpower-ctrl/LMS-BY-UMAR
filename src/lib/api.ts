@@ -92,6 +92,18 @@ export async function markAttendanceApi(records: Attendance[], currentUser?: Use
   }, currentUser);
 }
 
+export async function bulkUpdateAttendanceApi(records: Attendance[], currentUser?: User): Promise<{
+  success: boolean;
+  message: string;
+  attendance: Attendance[];
+  recalculatedPayrolls: Payroll[];
+}> {
+  return fetchApi('/api/attendance/bulk-update', {
+    method: 'POST',
+    body: JSON.stringify({ records })
+  }, currentUser);
+}
+
 // 5. Payroll
 export async function getPayrollApi(currentUser?: User): Promise<Payroll[]> {
   return fetchApi<Payroll[]>('/api/payroll', {}, currentUser);
@@ -342,11 +354,32 @@ export async function workerLoginApi(data: {
 }): Promise<{
   success: boolean;
   user?: User;
+  token?: string;
   message?: string;
   error?: string;
   company?: Company;
 }> {
   return fetchApi('/api/auth/worker-login', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+}
+
+export async function adminLoginApi(data: {
+  email?: string;
+  loginSerial?: string;
+  emailOrSerial?: string;
+  password?: string;
+  companyToken?: string;
+}): Promise<{
+  success: boolean;
+  user?: User;
+  token?: string;
+  message?: string;
+  error?: string;
+  company?: Company;
+}> {
+  return fetchApi('/api/auth/admin-login', {
     method: 'POST',
     body: JSON.stringify(data)
   });

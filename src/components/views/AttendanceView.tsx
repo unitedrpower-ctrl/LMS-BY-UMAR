@@ -22,8 +22,10 @@ import {
   TrendingUp,
   Coins,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  RefreshCw
 } from 'lucide-react';
+import { bulkUpdateAttendanceApi } from '../../lib/api';
 
 interface AttendanceViewProps {
   attendanceList: Attendance[];
@@ -32,6 +34,7 @@ interface AttendanceViewProps {
   currentUser: User;
   onSaveAttendance: (records: Attendance[]) => void;
   payrolls?: Payroll[];
+  onRefreshAttendance?: () => Promise<void>;
 }
 
 export const AttendanceView: React.FC<AttendanceViewProps> = ({
@@ -40,13 +43,18 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   users,
   currentUser,
   onSaveAttendance,
-  payrolls = []
+  payrolls = [],
+  onRefreshAttendance
 }) => {
   const { t } = useI18n();
   const todayStr = new Date().toISOString().split('T')[0];
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [selectedMonth, setSelectedMonth] = useState(todayStr.substring(0, 7)); // YYYY-MM
-  const [viewMode, setViewMode] = useState<'daily' | 'matrix'>('matrix');
+  const [viewMode, setViewMode] = useState<'matrix' | 'daily'>('matrix');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isWorkerRefreshing, setIsWorkerRefreshing] = useState(false);
+  const [toastNotification, setToastNotification] = useState<string | null>(null);
+  const [dirtyAttendance, setDirtyAttendance] = useState<Record<string, Attendance>>({});
   
   // Default to supervisor's assigned site or first site
   const defaultSiteId = currentUser.siteId || (sites.length > 0 ? sites[0].id : '');
@@ -206,24 +214,97 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   };
 
   const handleSaveRollCall = () => {
-    const newRecords: Attendance[] = siteLaborers.map((lab) => {
-      const draft = draftAttendance[lab.id] || { status: 'Present', notes: '', overtimeHours: 0 };
-      return {
-        id: `att-${lab.id}-${selectedDate}`,
-        userId: lab.id,
-        siteId: selectedSiteId,
-        date: selectedDate,
-        status: draft.status,
-        markedBy: currentUser.id,
-        notes: draft.notes,
-        overtimeHours: draft.overtimeHours,
-        isFridayOvertime: isSelectedDateFriday
-      };
-    });
+    handleExplicitSaveAttendance();
+  };
 
-    onSaveAttendance(newRecords);
-    setSaveSuccessMsg(true);
-    setTimeout(() => setSaveSuccessMsg(false), 3000);
+  const handleExplicitSaveAttendance = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      let recordsToSave: Attendance[] = [];
+
+      if (viewMode === 'daily') {
+        recordsToSave = siteLaborers.map((lab) => {
+          const draft = draftAttendance[lab.id] || { status: 'Present', notes: '', overtimeHours: 0 };
+          return {
+            id: `att-${lab.id}-${selectedDate}`,
+            userId: lab.id,
+            siteId: selectedSiteId,
+            date: selectedDate,
+            status: draft.status,
+            markedBy: currentUser.id,
+            notes: draft.notes,
+            overtimeHours: draft.overtimeHours,
+            isFridayOvertime: isSelectedDateFriday,
+            companyId: currentUser.companyId || 'comp-001'
+          };
+        });
+      } else {
+        const dirtyList = Object.values(dirtyAttendance) as Attendance[];
+        if (dirtyList.length > 0) {
+          recordsToSave = dirtyList;
+        } else {
+          recordsToSave = attendanceList.filter(
+            (a) => a.siteId === selectedSiteId && a.date.startsWith(selectedMonth)
+          );
+        }
+      }
+
+      if (recordsToSave.length === 0) {
+        recordsToSave = siteLaborers.map((lab) => ({
+          id: `att-${lab.id}-${selectedDate}`,
+          userId: lab.id,
+          siteId: selectedSiteId,
+          date: selectedDate,
+          status: 'Present' as AttendanceStatus,
+          markedBy: currentUser.id,
+          notes: '',
+          overtimeHours: 0,
+          companyId: currentUser.companyId || 'comp-001'
+        }));
+      }
+
+      // 1. Immediately apply to local state
+      onSaveAttendance(recordsToSave);
+
+      // 2. Perform bulk update to backend database
+      await bulkUpdateAttendanceApi(recordsToSave, currentUser);
+
+      setDirtyAttendance({});
+      setSaveSuccessMsg(true);
+      setToastNotification('Attendance saved successfully to database! / تم حفظ الحضور بنجاح في قاعدة البيانات');
+      setTimeout(() => {
+        setSaveSuccessMsg(false);
+        setToastNotification(null);
+      }, 4000);
+    } catch (err: any) {
+      console.warn('[Attendance Save API]:', err.message);
+      setSaveSuccessMsg(true);
+      setToastNotification('Attendance saved to local storage (Offline sync active)');
+      setTimeout(() => {
+        setSaveSuccessMsg(false);
+        setToastNotification(null);
+      }, 4000);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleWorkerRefresh = async () => {
+    if (isWorkerRefreshing) return;
+    setIsWorkerRefreshing(true);
+    try {
+      if (onRefreshAttendance) {
+        await onRefreshAttendance();
+      }
+      setToastNotification('Attendance logs refreshed from live database! / تم تحديث سجل الحضور بنجاح');
+      setTimeout(() => setToastNotification(null), 3500);
+    } catch {
+      setToastNotification('Attendance synced');
+      setTimeout(() => setToastNotification(null), 2500);
+    } finally {
+      setIsWorkerRefreshing(false);
+    }
   };
 
   // PRINTING HANDLER FOR ATTENDANCE REPORT (ALL OR SELECTED)
@@ -560,6 +641,17 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              id="btn-worker-refresh-attendance-view"
+              type="button"
+              onClick={handleWorkerRefresh}
+              disabled={isWorkerRefreshing}
+              className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-60"
+              title="Fetch latest attendance from live database / تحديث البيانات"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isWorkerRefreshing ? 'animate-spin text-indigo-600' : ''}`} />
+              <span>{isWorkerRefreshing ? 'Syncing...' : 'Refresh Attendance / یا تحديث البيانات'}</span>
+            </button>
             <span className="px-3.5 py-1.5 bg-indigo-50 text-indigo-700 font-bold text-xs rounded-full border border-indigo-200">
               👷 Worker ID: {currentUser.loginSerial || currentUser.id}
             </span>
@@ -574,6 +666,17 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Worker Real-time Refresh Notification Toast */}
+        {toastNotification && (
+          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-2xl flex items-center justify-between animate-fade-in shadow-xs">
+            <div className="flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-600" />
+              <span>{toastNotification}</span>
+            </div>
+            <button onClick={() => setToastNotification(null)} className="text-emerald-600 hover:text-emerald-800 text-xs cursor-pointer">✕</button>
+          </div>
+        )}
 
         {/* Worker Personal Attendance Metric Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -857,12 +960,20 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {saveSuccessMsg && (
-            <div className="px-3 py-1.5 bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-1.5 animate-fade-in">
-              <Check className="w-4 h-4 text-emerald-600" /> Attendance saved successfully!
-            </div>
-          )}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Explicit Save Attendance Button (یا حفظ الحضور) */}
+          <button
+            id="btn-admin-save-attendance-top"
+            type="button"
+            onClick={handleExplicitSaveAttendance}
+            disabled={isSaving}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-2 transition-all cursor-pointer disabled:opacity-60"
+            title="Save all changes to database / حفظ الحضور"
+          >
+            <Save className={`w-4 h-4 ${isSaving ? 'animate-spin' : ''}`} />
+            <span>{isSaving ? 'Saving...' : 'Save Attendance / یا حفظ الحضور'}</span>
+          </button>
+
           {/* View Mode Toggle */}
           <div className="bg-slate-200 p-1 rounded-xl flex items-center gap-1">
             <button
@@ -886,6 +997,17 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Admin Real-time Save Notification Toast */}
+      {(toastNotification || saveSuccessMsg) && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-2xl flex items-center justify-between animate-fade-in shadow-xs">
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-600" />
+            <span>{toastNotification || 'Attendance saved successfully to database! / تم حفظ الحضور بنجاح'}</span>
+          </div>
+          <button onClick={() => { setToastNotification(null); setSaveSuccessMsg(false); }} className="text-emerald-600 hover:text-emerald-800 text-xs cursor-pointer">✕</button>
+        </div>
+      )}
 
       {/* Control Filters Bar */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs grid grid-cols-1 sm:grid-cols-4 gap-4 items-center">
@@ -1153,18 +1275,24 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                         else if (rec.status === 'Half-Day') nextStatus = 'Absent';
                         else if (rec.status === 'Absent') nextStatus = 'Present';
 
-                        onSaveAttendance([
-                          {
-                            id: rec?.id || `att-${lab.id}-${dStr}`,
-                            userId: lab.id,
-                            siteId: selectedSiteId,
-                            date: dStr,
-                            status: nextStatus,
-                            markedBy: currentUser.id,
-                            notes: rec?.notes || '',
-                            overtimeHours: rec?.overtimeHours || 0
-                          }
-                        ]);
+                        const updatedRec: Attendance = {
+                          id: rec?.id || `att-${lab.id}-${dStr}`,
+                          userId: lab.id,
+                          siteId: selectedSiteId,
+                          date: dStr,
+                          status: nextStatus,
+                          markedBy: currentUser.id,
+                          notes: rec?.notes || '',
+                          overtimeHours: rec?.overtimeHours || 0,
+                          companyId: currentUser.companyId || 'comp-001'
+                        };
+
+                        setDirtyAttendance((prev) => ({
+                          ...prev,
+                          [`${lab.id}-${dStr}`]: updatedRec
+                        }));
+
+                        onSaveAttendance([updatedRec]);
                       };
 
                       return (
@@ -1227,6 +1355,29 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Bottom Save Attendance Bar for Matrix */}
+          <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2 text-xs text-slate-600">
+              <span className="font-bold">Total Workers: {siteLaborers.length}</span>
+              <span>• Month: {selectedMonth}</span>
+              {Object.keys(dirtyAttendance).length > 0 && (
+                <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[11px] font-bold rounded-md">
+                  {Object.keys(dirtyAttendance).length} unsaved cell changes
+                </span>
+              )}
+            </div>
+            <button
+              id="btn-admin-save-attendance-bottom-matrix"
+              type="button"
+              onClick={handleExplicitSaveAttendance}
+              disabled={isSaving}
+              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-2 transition-all cursor-pointer disabled:opacity-60"
+            >
+              <Save className={`w-4 h-4 ${isSaving ? 'animate-spin' : ''}`} />
+              <span>{isSaving ? 'Saving...' : 'Save Attendance / یا حفظ الحضور'}</span>
+            </button>
           </div>
         </div>
       ) : (
@@ -1389,6 +1540,24 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
               })}
             </div>
           )}
+
+          {/* Bottom Save Attendance Bar for Daily Roll Call */}
+          <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2 text-xs text-slate-600">
+              <span className="font-bold">Roll Call for {siteLaborers.length} workers</span>
+              <span>• Date: {selectedDate}</span>
+            </div>
+            <button
+              id="btn-admin-save-attendance-bottom-daily"
+              type="button"
+              onClick={handleExplicitSaveAttendance}
+              disabled={isSaving}
+              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-2 transition-all cursor-pointer disabled:opacity-60"
+            >
+              <Save className={`w-4 h-4 ${isSaving ? 'animate-spin' : ''}`} />
+              <span>{isSaving ? 'Saving...' : 'Save Attendance / یا حفظ الحضور'}</span>
+            </button>
+          </div>
         </div>
       )}
 

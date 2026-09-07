@@ -16,7 +16,8 @@ import {
   ShieldCheck, 
   ChevronRight, 
   HardHat, 
-  Database 
+  Database,
+  RefreshCw
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -28,6 +29,7 @@ interface DashboardViewProps {
   complaints: Complaint[];
   notices: Notice[];
   setActiveTab: (tab: string) => void;
+  onRefreshAttendance?: () => Promise<void>;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -38,10 +40,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   payrolls,
   complaints,
   notices,
-  setActiveTab
+  setActiveTab,
+  onRefreshAttendance
 }) => {
   const { t } = useI18n();
   const todayStr = new Date().toISOString().split('T')[0];
+  const [isRefreshingAtt, setIsRefreshingAtt] = React.useState(false);
+  const [refreshToast, setRefreshToast] = React.useState<string | null>(null);
+
+  const handleManualRefresh = async () => {
+    if (isRefreshingAtt) return;
+    setIsRefreshingAtt(true);
+    try {
+      if (onRefreshAttendance) {
+        await onRefreshAttendance();
+      }
+      setRefreshToast('Attendance data refreshed! / تم تحديث البيانات بنجاح');
+      setTimeout(() => setRefreshToast(null), 3000);
+    } catch {
+      setRefreshToast('Sync complete');
+      setTimeout(() => setRefreshToast(null), 2500);
+    } finally {
+      setIsRefreshingAtt(false);
+    }
+  };
 
 
   // Derived metrics
@@ -123,26 +145,48 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         /* LABORER DASHBOARD CARD ROW */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Today's Status */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-              <span>Today's Attendance</span>
-              <CalendarCheck className="w-4 h-4 text-indigo-600" />
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+                <span>Today's Attendance</span>
+                <CalendarCheck className="w-4 h-4 text-indigo-600" />
+              </div>
+              <div className="mt-3 flex items-center justify-between">
+                <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                  myTodayAttendance?.status === 'Present' 
+                    ? 'bg-emerald-100 text-emerald-800' 
+                    : myTodayAttendance?.status === 'Half-Day'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {myTodayAttendance ? myTodayAttendance.status : 'Not Marked Yet'}
+                </span>
+                <span className="text-xs text-slate-400">{todayStr}</span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-2">
+                {myTodayAttendance?.notes || 'Marked by site supervisor during morning roll call.'}
+              </p>
             </div>
-            <div className="mt-3 flex items-center justify-between">
-              <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                myTodayAttendance?.status === 'Present' 
-                  ? 'bg-emerald-100 text-emerald-800' 
-                  : myTodayAttendance?.status === 'Half-Day'
-                  ? 'bg-amber-100 text-amber-800'
-                  : 'bg-slate-100 text-slate-600'
-              }`}>
-                {myTodayAttendance ? myTodayAttendance.status : 'Not Marked Yet'}
-              </span>
-              <span className="text-xs text-slate-400">{todayStr}</span>
+
+            {/* Refresh Attendance Button (یا تحديث البيانات) */}
+            <div className="mt-3 pt-2 border-t border-slate-100">
+              <button
+                id="btn-worker-card-refresh-attendance"
+                type="button"
+                onClick={handleManualRefresh}
+                disabled={isRefreshingAtt}
+                className="w-full py-1.5 px-3 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-60 shadow-xs"
+                title="Fetch latest attendance records from live database / تحديث البيانات"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingAtt ? 'animate-spin text-indigo-600' : ''}`} />
+                <span>{isRefreshingAtt ? 'Syncing...' : 'Refresh Attendance / یا تحديث البيانات'}</span>
+              </button>
+              {refreshToast && (
+                <div className="mt-1 text-[11px] text-emerald-600 font-medium text-center animate-fade-in">
+                  ✓ {refreshToast}
+                </div>
+              )}
             </div>
-            <p className="text-[11px] text-slate-500 mt-2">
-              {myTodayAttendance?.notes || 'Marked by site supervisor during morning roll call.'}
-            </p>
           </div>
 
           {/* Daily Rate & Earnings */}

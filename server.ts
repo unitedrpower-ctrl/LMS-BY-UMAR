@@ -1721,6 +1721,79 @@ Platform Administration • LMS by Umar`;
     });
   });
 
+  // Dedicated Admin Login Endpoint (Super Admin, HR Admin, Site Supervisor, Master Owner)
+  app.post('/api/auth/admin-login', (req, res) => {
+    const { email, loginSerial, emailOrSerial, username, password, companyToken } = req.body || {};
+    const inputIdentifier = (email || loginSerial || emailOrSerial || username || '').toString().trim().toLowerCase();
+    const inputPassword = (password || '').toString().trim();
+    const tokenParam = (companyToken || '').toString().trim().toLowerCase();
+
+    if (!inputIdentifier) {
+      return res.status(400).json({ error: 'Email Address or Login Serial is required.' });
+    }
+
+    // Match admin user by email, loginSerial, or ID
+    const user = users.find(u =>
+      (u.email && u.email.toLowerCase() === inputIdentifier) ||
+      (u.loginSerial && u.loginSerial.toLowerCase() === inputIdentifier) ||
+      (u.id && u.id.toLowerCase() === inputIdentifier)
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        error: `Account "${inputIdentifier}" was not found. Please verify your credentials or register a new account.`
+      });
+    }
+
+    // Master Owner bypass or tenant check
+    const isMasterOwner = ['umarchoudhary259@gmail.com', 'umarchaudhary259@gmail.com', 'unitedrpower@gmail.com'].includes(user.email.toLowerCase()) || user.role === 'Owner';
+    if (tokenParam && tokenParam !== 'all' && !isMasterOwner) {
+      const matchComp = user.companyId === tokenParam || 
+                        (user.companyId && user.companyId.toLowerCase() === tokenParam) ||
+                        (user.companyId && user.companyId.replace('comp-', '') === tokenParam.replace('comp-', ''));
+      if (!matchComp) {
+        return res.status(403).json({
+          error: `Access Denied: Account "${inputIdentifier}" belongs to another organization workspace.`
+        });
+      }
+    }
+
+    // Check password
+    if (user.loginPassword && user.loginPassword.trim() !== '') {
+      if (!user.loginPassword.startsWith('$2b$10$')) {
+        if (user.loginPassword.trim() !== inputPassword) {
+          return res.status(401).json({ error: 'Invalid Password. Please check your credentials.' });
+        }
+      }
+    }
+
+    // Check account status
+    if (user.status === 'Pending' && !isMasterOwner) {
+      return res.status(403).json({
+        error: '⚠️ Account Pending Approval: Your registration request is currently under review by a Super Admin. You will gain access once approved.'
+      });
+    }
+
+    if (user.status === 'Rejected') {
+      return res.status(403).json({ error: '❌ Your account registration request has been declined by an administrator.' });
+    }
+
+    if (user.status === 'Inactive' || user.status === 'Suspended') {
+      return res.status(403).json({ error: '🔴 Account Deactivated/Suspended: Please contact HR or Super Admin to reactivate your profile.' });
+    }
+
+    const company = companies.find(c => c.id === user.companyId);
+    const token = `jwt-admin-${user.id}-${Date.now()}`;
+
+    return res.json({
+      success: true,
+      token,
+      user,
+      company,
+      message: `Welcome back, ${user.name}!`
+    });
+  });
+
   // Exact Company-Scoped Worker Authentication Endpoint (3-Factor Worker Login Engine)
   app.post(['/api/auth/worker-login', '/api/auth/login'], (req, res) => {
     const { 
@@ -1741,6 +1814,35 @@ Platform Administration • LMS by Umar`;
     const inputCode = (companyCode || company_code || companyToken || company_id || companyId || tenantId || company || '').toString().trim();
     const inputId = (serialNumber || loginSerial || iqamaId || email || '').toString().trim().toLowerCase();
     const cleanPass = (password || '').toString().trim();
+
+    // If no companyCode is passed but an email/loginSerial is provided, forward to admin login handler
+    if (!inputCode && inputId) {
+      const adminCandidate = users.find(u =>
+        (u.email && u.email.toLowerCase() === inputId) ||
+        (u.loginSerial && u.loginSerial.toLowerCase() === inputId) ||
+        (u.id && u.id.toLowerCase() === inputId)
+      );
+      if (adminCandidate && adminCandidate.role !== 'Labor') {
+        const isMaster = ['umarchoudhary259@gmail.com', 'umarchaudhary259@gmail.com', 'unitedrpower@gmail.com'].includes(adminCandidate.email.toLowerCase()) || adminCandidate.role === 'Owner';
+        if (adminCandidate.loginPassword && adminCandidate.loginPassword.trim() !== '') {
+          if (!adminCandidate.loginPassword.startsWith('$2b$10$') && adminCandidate.loginPassword.trim() !== cleanPass) {
+            return res.status(401).json({ error: 'Invalid Password. Please check your credentials.' });
+          }
+        }
+        if (adminCandidate.status === 'Pending' && !isMaster) {
+          return res.status(403).json({ error: '⚠️ Account Pending Approval: Under review by Super Admin.' });
+        }
+        const comp = companies.find(c => c.id === adminCandidate.companyId);
+        const token = `jwt-admin-${adminCandidate.id}-${Date.now()}`;
+        return res.json({
+          success: true,
+          token,
+          user: adminCandidate,
+          company: comp,
+          message: `Welcome back, ${adminCandidate.name}!`
+        });
+      }
+    }
 
     if (!inputCode) {
       return res.status(400).json({ error: 'Company Code is required for worker login (e.g. BAW-001 or ZCON-005).' });
@@ -1821,8 +1923,11 @@ Platform Administration • LMS by Umar`;
       worker.companyId = matchedCompany.id;
     }
 
+    const token = `jwt-worker-${worker.id}-${Date.now()}`;
+
     return res.json({
       success: true,
+      token,
       user: worker,
       company: matchedCompany,
       message: `👷 Worker Authentication Verified! Logged in under: ${matchedCompany.name} (${matchedCompany.companyCode})`
@@ -2599,14 +2704,15 @@ System Administration • LMS by Umar`;
     res.json(filtered);
   });
 
-  // POST /api/attendance - Marks attendance & automatically recalculates monthly salary
-  app.post('/api/attendance', (req: AuthenticatedRequest, res) => {
+  // POST /api/attendance/bulk-update & POST /api/attendance - Marks attendance & automatically recalculates monthly salary
+  app.post(['/api/attendance/bulk-update', '/api/attendance'], (req: AuthenticatedRequest, res) => {
     // RBAC Check: Only Super Admin, HR Admin, or Site Supervisor can mark attendance
     if (req.userRole === 'Labor') {
       return res.status(403).json({ error: 'Forbidden: Labor users cannot mark attendance.' });
     }
 
-    const records: Attendance[] = Array.isArray(req.body) ? req.body : [req.body];
+    const rawInput = req.body?.records || req.body;
+    const records: Attendance[] = Array.isArray(rawInput) ? rawInput : [rawInput];
     const updatedRecords: Attendance[] = [];
     const affectedWorkerMonthPairs = new Set<string>();
 
@@ -2665,6 +2771,7 @@ System Administration • LMS by Umar`;
     });
 
     res.json({
+      success: true,
       message: `Successfully saved ${updatedRecords.length} attendance record(s) and automatically recalculated payroll for ${recalculatedPayrolls.length} worker(s).`,
       attendance: updatedRecords,
       recalculatedPayrolls
