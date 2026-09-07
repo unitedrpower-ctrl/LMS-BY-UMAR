@@ -111,6 +111,31 @@ export default function App() {
     localStorage.setItem('lms_theme', theme);
   }, [theme]);
 
+  // Master Owner Persistent Session Restoration
+  useEffect(() => {
+    try {
+      const isMasterAuth = localStorage.getItem('lms_master_authenticated') === 'true';
+      const masterUserJson = localStorage.getItem('lms_master_user');
+      const savedRoleId = localStorage.getItem('lms_user_role');
+      if (isMasterAuth && masterUserJson && savedRoleId === 'Owner') {
+        const parsed = JSON.parse(masterUserJson);
+        if (parsed && parsed.id) {
+          if (!currentUserId) {
+            setCurrentUserId(parsed.id);
+          }
+          setUsers(prev => {
+            if (!prev.find(u => u.id === parsed.id)) {
+              return [parsed, ...prev];
+            }
+            return prev;
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Could not restore master owner session:", e);
+    }
+  }, []);
+
   const handleToggleTheme = () => {
     setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
@@ -343,7 +368,14 @@ export default function App() {
     localStorage.removeItem('lms_user_role');
     localStorage.removeItem('lms_user_email');
     localStorage.removeItem('lms_auth_token');
+    localStorage.removeItem('lms_master_authenticated');
+    localStorage.removeItem('lms_master_user');
     localStorage.removeItem('labor_admin_current_user_id_v1');
+    try {
+      document.cookie = 'lms_master_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+      document.cookie = 'lms_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+      document.cookie = 'lms_master_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    } catch (e) {}
     sessionStorage.clear();
     setIsAuthModalOpen(false);
 

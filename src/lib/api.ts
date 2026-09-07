@@ -532,16 +532,17 @@ export async function completeProfileApi(data: {
   }, currentUser);
 }
 
-export async function requestMasterOtpApi(email: string): Promise<{
+export async function requestMasterOtpApi(email: string, password?: string): Promise<{
   success: boolean;
   email: string;
   otpCode?: string;
   expiresMinutes: number;
   message: string;
+  emailSent?: boolean;
 }> {
   return fetchApi('/api/auth/request-master-otp', {
     method: 'POST',
-    body: JSON.stringify({ email })
+    body: JSON.stringify({ email, password })
   });
 }
 
@@ -549,6 +550,7 @@ export async function verifyMasterOtpApi(email: string, otp: string): Promise<{
   success: boolean;
   user: User;
   message: string;
+  token?: string;
 }> {
   return fetchApi('/api/auth/verify-master-otp', {
     method: 'POST',

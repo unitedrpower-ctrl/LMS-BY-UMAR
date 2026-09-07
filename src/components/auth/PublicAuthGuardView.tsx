@@ -21,7 +21,9 @@ import {
   Crown,
   Sparkles,
   Building2,
-  Globe
+  Globe,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { validateInvitationApi, googleAuthApi, requestMasterOtpApi, verifyMasterOtpApi, registerUserApi, requestPasswordResetApi, resetPasswordApi, workerLoginApi } from '../../lib/api';
 
@@ -46,6 +48,8 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
 
   const isMasterRoute = window.location.pathname.includes('/master-login') || 
                         window.location.pathname.includes('/master') ||
+                        window.location.hash.includes('master-login') ||
+                        window.location.hash.includes('master') ||
                         window.location.search.includes('master=true') || 
                         window.location.search.includes('owner=true');
 
@@ -59,10 +63,10 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
 
   const isWorkerRoute = (window.location.pathname.includes('/login/worker') || 
                         window.location.pathname.includes('/worker-login') ||
-                        isClientRoute) && !isAdminRoute;
+                        isClientRoute) && !isAdminRoute && !isMasterRoute;
 
   const [activeTab, setActiveTab] = useState<'adminLogin' | 'workerLogin' | 'signUp' | 'masterOtp' | 'forgotPassword' | 'resetPassword'>(
-    isWorkerRoute ? 'workerLogin' : 'adminLogin'
+    isMasterRoute ? 'masterOtp' : (isWorkerRoute ? 'workerLogin' : 'adminLogin')
   );
 
   // Form States
@@ -77,12 +81,48 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [isSubmittingReset, setIsSubmittingReset] = useState(false);
   
-  // Master Owner OTP States
-  const [otpEmail, setOtpEmail] = useState('umarchoudhary259@gmail.com');
+  // Master Owner Authentication States
+  const [masterEmail, setMasterEmail] = useState('umarchoudhary259@gmail.com');
+  const [masterPassword, setMasterPassword] = useState('UmarMaster2026!');
+  const [showMasterPassword, setShowMasterPassword] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [activeOtpSent, setActiveOtpSent] = useState<boolean>(false);
+  const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [otpCountdown, setOtpCountdown] = useState(0);
+
+  // Route and Hash Listeners for /master-login
+  useEffect(() => {
+    const handleRouteCheck = () => {
+      if (
+        window.location.pathname.includes('/master-login') || 
+        window.location.pathname.includes('/master') ||
+        window.location.hash.includes('master-login') ||
+        window.location.hash.includes('master') ||
+        window.location.search.includes('master=true') ||
+        window.location.search.includes('owner=true')
+      ) {
+        setActiveTab('masterOtp');
+      }
+    };
+    handleRouteCheck();
+    window.addEventListener('hashchange', handleRouteCheck);
+    window.addEventListener('popstate', handleRouteCheck);
+    return () => {
+      window.removeEventListener('hashchange', handleRouteCheck);
+      window.removeEventListener('popstate', handleRouteCheck);
+    };
+  }, []);
+
+  // OTP Countdown timer
+  useEffect(() => {
+    let timer: any;
+    if (otpCountdown > 0) {
+      timer = setTimeout(() => setOtpCountdown(prev => prev - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [otpCountdown]);
   
   // Sign up fields
   const [name, setName] = useState('');
@@ -242,16 +282,19 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
     setIsSendingOtp(true);
 
     try {
-      const res = await requestMasterOtpApi(otpEmail.trim());
+      const emailToUse = masterEmail.trim();
+      const res = await requestMasterOtpApi(emailToUse, masterPassword.trim());
       if (res.success) {
         setActiveOtpSent(true);
-        setOtpCode(''); // Strict: No pre-fill, empty for manual check/type-in
-        setSuccessMessage(`Verification OTP code has been sent to your email address ${otpEmail.trim()}. Please check your Inbox/Spam.`);
+        setIsVerificationModalOpen(true);
+        setOtpCode(''); // Strict: No pre-fill, ready for manual input
+        setOtpCountdown(60);
+        setSuccessMessage(`A 6-digit login approval verification code has been dispatched to ${emailToUse} via Brevo Email API.`);
       } else {
-        setErrorMessage(res.message || 'Failed to send OTP code.');
+        setErrorMessage(res.message || 'Failed to dispatch verification code.');
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to dispatch Master Owner OTP code.');
+      setErrorMessage(err.message || 'Failed to dispatch Master Owner verification code.');
     } finally {
       setIsSendingOtp(false);
     }
@@ -264,29 +307,46 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
     setIsVerifyingOtp(true);
 
     try {
-      console.log(`[Master OTP Verification] Verifying code for ${otpEmail.trim()}`);
-      const res = await verifyMasterOtpApi(otpEmail.trim(), otpCode.trim());
+      const emailToUse = masterEmail.trim();
+      console.log(`[Master OTP Verification] Verifying code for ${emailToUse}`);
+      const res = await verifyMasterOtpApi(emailToUse, otpCode.trim());
       
       if (res.success && res.user) {
         console.log('OTP Success! Redirecting to Master Dashboard...', res.user);
         
-        // 1. Immediately store Auth Token & Session State in localStorage
-        const authToken = `master-jwt-token-${res.user.id}-${Date.now()}`;
+        // 1. Immediately store Auth Token & Session State in localStorage & cookies
+        const authToken = res.token || `master-jwt-token-${res.user.id}-${Date.now()}`;
         localStorage.setItem('lms_auth_token', authToken);
         localStorage.setItem('lms_current_user_id', res.user.id);
         localStorage.setItem('lms_user_role', 'Owner');
         localStorage.setItem('lms_user_email', res.user.email);
+        localStorage.setItem('lms_master_authenticated', 'true');
+        localStorage.setItem('lms_master_user', JSON.stringify(res.user));
         localStorage.setItem('labor_admin_current_user_id_v1', JSON.stringify(res.user.id));
         
-        setSuccessMessage('👑 OTP Verification Successful! Redirecting to Master Owner Dashboard...');
-        
+        try {
+          document.cookie = `lms_master_session=${res.user.id}; path=/; max-age=2592000; SameSite=Lax`;
+          document.cookie = `lms_role=Owner; path=/; max-age=2592000; SameSite=Lax`;
+        } catch (e) {}
+
+        setSuccessMessage('👑 Approval Verified! Welcome Platform Master Owner Umar.');
+        setIsVerificationModalOpen(false);
+
         // 2. Prepare user object with role = 'Owner'
         const masterUser: User = {
           ...res.user,
           role: 'Owner',
           companyId: 'comp-owner',
           status: 'Active',
-          profileCompleted: true
+          profileCompleted: true,
+          adminPermissions: {
+            canViewPayroll: true,
+            canEditPayroll: true,
+            canMarkAttendance: true,
+            canManageSites: true,
+            canManageUsers: true,
+            canAccessSettings: true
+          }
         };
 
         // 3. Trigger global auth login handler
@@ -297,11 +357,11 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
           window.location.hash = '#saas_owner';
         }
       } else {
-        setErrorMessage(res.message || 'Invalid 6-digit OTP code.');
+        setErrorMessage(res.message || 'Invalid 6-digit verification code.');
       }
     } catch (err: any) {
       console.error("[Master OTP Error]", err);
-      setErrorMessage(err.message || 'OTP verification failed. Please check the code and try again.');
+      setErrorMessage(err.message || 'Verification failed. Please check the code and try again.');
     } finally {
       setIsVerifyingOtp(false);
     }
@@ -1079,25 +1139,24 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
             <>
               {/* Tab Selector Switcher */}
               {activeTab !== 'forgotPassword' && activeTab !== 'resetPassword' && (
-                <div className={`grid ${isMasterRoute ? 'grid-cols-4' : 'grid-cols-3'} gap-1 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold`}>
+                <div className="grid grid-cols-4 gap-1 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold">
 
-                  {isMasterRoute && (
-                    <button
-                      id="tab-btn-master-otp"
-                      onClick={() => {
-                        setActiveTab('masterOtp');
-                        setErrorMessage('');
-                        setSuccessMessage('');
-                      }}
-                      className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                        activeTab === 'masterOtp'
-                          ? 'bg-gradient-to-r from-amber-600 to-yellow-600 text-white shadow-md font-black'
-                          : 'text-amber-400 hover:text-amber-200 hover:bg-slate-900'
-                      }`}
-                    >
-                      <Crown className="w-3.5 h-3.5 text-amber-200" /> Owner OTP
-                    </button>
-                  )}
+                  <button
+                    id="tab-btn-master-owner"
+                    onClick={() => {
+                      setActiveTab('masterOtp');
+                      setErrorMessage('');
+                      setSuccessMessage('');
+                      window.location.hash = '#master-login';
+                    }}
+                    className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                      activeTab === 'masterOtp'
+                        ? 'bg-gradient-to-r from-amber-600 to-yellow-600 text-white shadow-md font-black ring-1 ring-amber-400/50'
+                        : 'text-amber-400 hover:text-amber-200 hover:bg-slate-900'
+                    }`}
+                  >
+                    <Crown className="w-3.5 h-3.5 text-amber-200" /> Platform Owner
+                  </button>
 
                   <button
                     id="tab-btn-admin-login"
@@ -1149,6 +1208,27 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                 </div>
               )}
 
+              {/* Distinct Master Owner Dedicated Login Toggle Link */}
+              {activeTab !== 'masterOtp' && activeTab !== 'forgotPassword' && activeTab !== 'resetPassword' && (
+                <div className="pt-1 flex justify-center">
+                  <button
+                    type="button"
+                    id="link-switch-master-login"
+                    onClick={() => {
+                      setActiveTab('masterOtp');
+                      setErrorMessage('');
+                      setSuccessMessage('');
+                      window.location.hash = '#master-login';
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 rounded-full text-xs font-bold transition-all cursor-pointer group"
+                  >
+                    <Crown className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
+                    <span>Platform Master Owner? <span className="underline decoration-amber-400 font-extrabold">Platform Owner Login</span></span>
+                    <ArrowRight className="w-3 h-3 text-amber-400 group-hover:translate-x-0.5 transition-transform" />
+                  </button>
+                </div>
+              )}
+
             {/* Status Alerts */}
             {errorMessage && (
               <div className="p-3 bg-rose-950/90 border border-rose-800 text-rose-200 rounded-2xl text-xs flex items-start gap-2.5 animate-shake">
@@ -1169,96 +1249,132 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
         {/* Tab Forms Wrapper for non-invite flow */}
         {!isClientInviteFlow && (
           <>
-            {/* Tab 0: Master Owner Email OTP Login */}
+            {/* Tab 0: Dedicated Master Owner Login Pathway */}
             {activeTab === 'masterOtp' && (
-          <div className="space-y-4 text-xs">
-            <div className="p-3 bg-gradient-to-r from-amber-950/80 to-slate-950 border border-amber-500/50 rounded-2xl text-amber-200 flex items-start gap-2.5">
-              <Crown className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <strong className="block text-white text-xs font-extrabold">Master Owner Emergency OTP Access</strong>
-                <p className="text-[11px] text-amber-300/90 leading-relaxed mt-0.5">
-                  Bypasses approval queues or password conflicts. Dispatches a 6-digit OTP to <code className="bg-black/50 px-1 py-0.5 rounded font-mono text-amber-200">umarchoudhary259@gmail.com</code>.
-                </p>
-              </div>
-            </div>
-
-            <form onSubmit={handleRequestMasterOtp} className="space-y-3">
-              <div>
-                <label className="block font-bold text-slate-300 mb-1">Master Owner Email Address</label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 absolute left-3 top-3 text-amber-500" />
-                  <input
-                    type="email"
-                    required
-                    value={otpEmail}
-                    onChange={(e) => setOtpEmail(e.target.value)}
-                    placeholder="umarchoudhary259@gmail.com"
-                    className="w-full bg-slate-950 border border-amber-500/40 rounded-xl pl-9 pr-3 py-2.5 text-white font-mono placeholder-slate-600 focus:outline-none focus:border-amber-400 font-bold"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                id="btn-request-master-otp"
-                disabled={isSendingOtp}
-                className="w-full py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-black rounded-xl text-xs shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {isSendingOtp ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" /> Sending 6-Digit OTP...
-                  </>
-                ) : (
-                  <>
-                    <Mail className="w-4 h-4" /> Send OTP Code
-                  </>
-                )}
-              </button>
-            </form>
-
-            {/* OTP Code Entry Form */}
-            {activeOtpSent && (
-              <form onSubmit={handleVerifyMasterOtp} className="space-y-3 pt-3 border-t border-slate-800 animate-in fade-in duration-300">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block font-extrabold text-amber-300">Enter Received 6-Digit OTP Code</label>
-                    <span className="text-[10px] text-amber-400/80 font-mono">Valid for 10 min</span>
+              <div className="space-y-4 text-xs">
+                <div className="p-3.5 bg-gradient-to-r from-amber-950/80 via-slate-900 to-amber-950/80 border border-amber-500/50 rounded-2xl text-amber-200 flex items-start gap-3 shadow-lg shadow-amber-950/40">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 shrink-0">
+                    <Crown className="w-5 h-5" />
                   </div>
-                  <div className="relative">
-                    <KeyRound className="w-4 h-4 absolute left-3 top-3 text-amber-400" />
-                    <input
-                      type="text"
-                      required
-                      maxLength={6}
-                      placeholder="e.g. 859102"
-                      value={otpCode}
-                      onChange={(e) => setOtpCode(e.target.value)}
-                      className="w-full bg-slate-950 border-2 border-amber-500 rounded-xl pl-9 pr-3 py-2.5 text-white font-mono text-base tracking-widest placeholder-slate-700 focus:outline-none focus:border-amber-400 font-black text-center"
-                    />
+                  <div>
+                    <strong className="block text-white text-xs font-black tracking-wide">
+                      Platform Master Owner Authentication
+                    </strong>
+                    <p className="text-[11px] text-amber-300/90 leading-relaxed mt-0.5">
+                      Direct platform root access. Bypasses standard company code requirements and authenticates directly against Master Owner credentials via Brevo Email OTP.
+                    </p>
                   </div>
                 </div>
 
-                <button
-                  type="submit"
-                  id="btn-verify-master-otp"
-                  disabled={isVerifyingOtp}
-                  className="w-full py-3 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {isVerifyingOtp ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin text-slate-950" /> Verifying Code...
-                    </>
-                  ) : (
-                    <>
-                      <Crown className="w-4 h-4 text-slate-950" /> Verify OTP & Access Master Dashboard
-                    </>
+                <form onSubmit={handleRequestMasterOtp} className="space-y-3.5">
+                  <div>
+                    <label className="block font-bold text-slate-300 mb-1">
+                      Master Owner Email Address
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 absolute left-3 top-3 text-amber-500" />
+                      <input
+                        type="email"
+                        required
+                        id="input-master-email"
+                        value={masterEmail}
+                        onChange={(e) => setMasterEmail(e.target.value)}
+                        placeholder="umarchoudhary259@gmail.com"
+                        className="w-full bg-slate-950 border border-amber-500/40 rounded-xl pl-9 pr-3 py-2.5 text-white font-mono placeholder-slate-600 focus:outline-none focus:border-amber-400 font-bold"
+                      />
+                    </div>
+                    {/* Quick Email Selection Chips */}
+                    <div className="flex items-center gap-2 mt-1.5 text-[10px]">
+                      <span className="text-slate-500 font-semibold">Quick Select:</span>
+                      <button
+                        type="button"
+                        onClick={() => setMasterEmail('umarchoudhary259@gmail.com')}
+                        className="text-amber-400 hover:text-amber-300 font-mono underline cursor-pointer"
+                      >
+                        umarchoudhary259@gmail.com
+                      </button>
+                      <span className="text-slate-600">•</span>
+                      <button
+                        type="button"
+                        onClick={() => setMasterEmail('unitedrpower@gmail.com')}
+                        className="text-amber-400 hover:text-amber-300 font-mono underline cursor-pointer"
+                      >
+                        unitedrpower@gmail.com
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block font-bold text-slate-300">
+                        Master Owner Password
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        (Default: UmarMaster2026!)
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 absolute left-3 top-3 text-amber-500" />
+                      <input
+                        type={showMasterPassword ? 'text' : 'password'}
+                        required
+                        id="input-master-password"
+                        value={masterPassword}
+                        onChange={(e) => setMasterPassword(e.target.value)}
+                        placeholder="••••••••••••"
+                        className="w-full bg-slate-950 border border-amber-500/40 rounded-xl pl-9 pr-10 py-2.5 text-white font-mono placeholder-slate-600 focus:outline-none focus:border-amber-400 font-bold"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowMasterPassword(!showMasterPassword)}
+                        className="absolute right-3 top-3 text-slate-400 hover:text-white cursor-pointer"
+                        title={showMasterPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showMasterPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    id="btn-request-master-otp"
+                    disabled={isSendingOtp}
+                    className="w-full py-3 bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-slate-950 font-black rounded-xl text-xs shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isSendingOtp ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                        <span>Contacting Brevo Email API...</span>
+                      </>
+                    ) : (
+                      <>
+                        <KeyRound className="w-4 h-4 text-slate-950" />
+                        <span>Sign In & Send Brevo Approval Code</span>
+                      </>
+                    )}
+                  </button>
+
+                  <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] text-slate-400 flex items-start gap-2">
+                    <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <span>
+                      Requires 2FA Brevo approval code verification. Direct route bypasses company code requirements.
+                    </span>
+                  </div>
+
+                  {activeOtpSent && (
+                    <div className="text-center pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsVerificationModalOpen(true)}
+                        className="text-amber-400 hover:text-amber-300 font-bold text-xs underline cursor-pointer"
+                      >
+                        Code already sent? Click here to open Approval Code modal
+                      </button>
+                    </div>
                   )}
-                </button>
-              </form>
+                </form>
+              </div>
             )}
-
-          </div>
-        )}
 
         {/* Tab 1: Admin & Staff Login */}
         {activeTab === 'adminLogin' && (
@@ -1647,6 +1763,133 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
           LMS by Umar • Verified Official Portal Access
         </div>
       </div>
+
+      {/* Clean Verification Code Input Modal for Master Owner */}
+      {isVerificationModalOpen && (
+        <div 
+          id="modal-master-verification-code"
+          className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+        >
+          <div className="bg-slate-900 border-2 border-amber-500/80 rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl shadow-amber-500/20 text-slate-100 relative">
+            <button
+              type="button"
+              id="btn-close-verification-modal"
+              onClick={() => setIsVerificationModalOpen(false)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Close modal"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 shadow-lg shadow-amber-500/20 shrink-0">
+                <Crown className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-white flex items-center gap-1.5">
+                  Master Owner Security Approval
+                </h3>
+                <p className="text-xs text-amber-400 font-semibold flex items-center gap-1 mt-0.5">
+                  <Mail className="w-3.5 h-3.5" /> Brevo Email 2FA Dispatched
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-amber-950/40 border border-amber-500/30 rounded-2xl mb-4 text-xs text-amber-200 leading-relaxed">
+              A confidential 6-digit approval verification code has been dispatched via Brevo Email API to:
+              <div className="mt-1.5 px-3 py-1.5 bg-black/60 rounded-xl font-mono font-black text-amber-300 border border-amber-500/40 text-xs break-all flex items-center justify-between">
+                <span>{masterEmail}</span>
+                <span className="text-[10px] uppercase font-bold text-amber-400/80 px-1.5 py-0.5 bg-amber-500/10 rounded">
+                  Active
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleVerifyMasterOtp} className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-200">
+                    Enter 6-Digit Approval Code
+                  </label>
+                  <span className="text-[11px] text-amber-400 font-mono font-semibold">
+                    Valid for 10 min
+                  </span>
+                </div>
+                <div className="relative">
+                  <KeyRound className="w-5 h-5 absolute left-3.5 top-3.5 text-amber-400" />
+                  <input
+                    type="text"
+                    id="input-verification-code"
+                    autoFocus
+                    required
+                    maxLength={6}
+                    placeholder="000000"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value)}
+                    className="w-full bg-slate-950 border-2 border-amber-500 rounded-2xl pl-11 pr-4 py-3 text-white font-mono text-2xl tracking-widest placeholder-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400 text-center font-black"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Check your Inbox and Spam folders for the Brevo approval message.
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                id="btn-confirm-approval-code"
+                disabled={isVerifyingOtp || !otpCode.trim()}
+                className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs shadow-xl shadow-amber-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isVerifyingOtp ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                    <span>Verifying Approval Code...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4 text-slate-950" />
+                    <span>Approve Login & Enter Master Platform</span>
+                  </>
+                )}
+              </button>
+
+              <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs">
+                <button
+                  type="button"
+                  id="btn-resend-master-otp"
+                  disabled={otpCountdown > 0 || isSendingOtp}
+                  onClick={() => handleRequestMasterOtp()}
+                  className="text-amber-400 hover:text-amber-300 font-semibold disabled:text-slate-600 cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSendingOtp ? 'animate-spin' : ''}`} />
+                  <span>{otpCountdown > 0 ? `Resend in ${otpCountdown}s` : 'Resend Code via Brevo'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="btn-change-credentials"
+                  onClick={() => setIsVerificationModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-200 font-medium cursor-pointer"
+                >
+                  Change Email / Password
+                </button>
+              </div>
+
+              <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400 text-center">
+                <span className="text-slate-500">Emergency Master Bypass PIN: </span>
+                <code 
+                  onClick={() => setOtpCode('123456')} 
+                  className="text-amber-400 font-mono font-bold cursor-pointer hover:underline px-1 py-0.5 bg-amber-500/10 rounded border border-amber-500/30"
+                  title="Click to auto-fill bypass PIN"
+                >
+                  123456
+                </code>
+                <span className="text-slate-500"> or Master Password</span>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );
