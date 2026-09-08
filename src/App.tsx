@@ -74,7 +74,7 @@ export default function App() {
 
     // 1. Check if Master Owner persistent session is active
     try {
-      const isMasterAuth = localStorage.getItem('lms_master_authenticated') === 'true';
+      const isMasterAuth = localStorage.getItem('lms_master_authenticated') === 'true' || localStorage.getItem('isMasterOwner') === 'true';
       const masterUserJson = localStorage.getItem('lms_master_user');
       if (isMasterAuth && masterUserJson) {
         const parsed = JSON.parse(masterUserJson);
@@ -173,7 +173,7 @@ export default function App() {
   // Master Owner Persistent Session Restoration & Route Listeners
   useEffect(() => {
     try {
-      const isMasterAuth = localStorage.getItem('lms_master_authenticated') === 'true';
+      const isMasterAuth = localStorage.getItem('lms_master_authenticated') === 'true' || localStorage.getItem('isMasterOwner') === 'true';
       const masterUserJson = localStorage.getItem('lms_master_user');
       if (isMasterAuth && masterUserJson) {
         const parsed = JSON.parse(masterUserJson);
@@ -211,7 +211,7 @@ export default function App() {
     const handleUrlRoute = () => {
       const pathname = window.location.pathname.toLowerCase();
       const hash = window.location.hash.toLowerCase();
-      const isMasterAuth = localStorage.getItem('lms_master_authenticated') === 'true';
+      const isMasterAuth = localStorage.getItem('lms_master_authenticated') === 'true' || localStorage.getItem('isMasterOwner') === 'true';
       if (
         pathname === '/owner' ||
         pathname.startsWith('/owner/') ||
@@ -384,7 +384,7 @@ export default function App() {
   let currentUser = users.find((u) => u.id === currentUserId) || null;
   if (!currentUser && currentUserId) {
     try {
-      const isMasterAuth = localStorage.getItem('lms_master_authenticated') === 'true';
+      const isMasterAuth = localStorage.getItem('lms_master_authenticated') === 'true' || localStorage.getItem('isMasterOwner') === 'true';
       const masterUserJson = localStorage.getItem('lms_master_user');
       if (isMasterAuth && masterUserJson) {
         const parsed = JSON.parse(masterUserJson);
@@ -479,7 +479,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    const isMaster = currentUser?.role === 'Owner' || localStorage.getItem('lms_master_authenticated') === 'true';
+    const isMaster = currentUser?.role === 'Owner' || localStorage.getItem('lms_master_authenticated') === 'true' || localStorage.getItem('isMasterOwner') === 'true';
     const params = new URLSearchParams(window.location.search);
     const existingCompToken = currentUser?.companyId || params.get('companyToken') || params.get('company_id') || params.get('companyId') || params.get('tenantId') || params.get('company');
     const isWorkerSession = currentUser?.role === 'Labor' || window.location.pathname.includes('/login/worker');
@@ -492,6 +492,7 @@ export default function App() {
     localStorage.removeItem('lms_auth_token');
     localStorage.removeItem('lms_master_token');
     localStorage.removeItem('lms_master_authenticated');
+    localStorage.removeItem('isMasterOwner');
     localStorage.removeItem('lms_master_user');
     localStorage.removeItem('lms_impersonating_company');
     localStorage.removeItem('lms_impersonating_company_id');

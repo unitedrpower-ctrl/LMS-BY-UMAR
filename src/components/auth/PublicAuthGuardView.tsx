@@ -335,12 +335,13 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
         
         // 1. Immediately store Auth Token & Session State in localStorage & cookies
         const authToken = res.token || `master-jwt-token-${res.user.id}-${Date.now()}`;
+        localStorage.setItem('isMasterOwner', 'true');
+        localStorage.setItem('lms_master_authenticated', 'true');
         localStorage.setItem('lms_auth_token', authToken);
         localStorage.setItem('lms_master_token', authToken);
         localStorage.setItem('lms_current_user_id', res.user.id);
         localStorage.setItem('lms_user_role', 'Owner');
         localStorage.setItem('lms_user_email', res.user.email);
-        localStorage.setItem('lms_master_authenticated', 'true');
         localStorage.setItem('lms_master_user', JSON.stringify(res.user));
         localStorage.setItem('labor_admin_current_user_id_v1', JSON.stringify(res.user.id));
         
@@ -407,12 +408,13 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
 
       if (res.success && res.user) {
         const authToken = `master-jwt-token-${res.user.id}-${Date.now()}`;
+        localStorage.setItem('isMasterOwner', 'true');
+        localStorage.setItem('lms_master_authenticated', 'true');
         localStorage.setItem('lms_auth_token', authToken);
         localStorage.setItem('lms_master_token', authToken);
         localStorage.setItem('lms_current_user_id', res.user.id);
         localStorage.setItem('lms_user_role', 'Owner');
         localStorage.setItem('lms_user_email', res.user.email);
-        localStorage.setItem('lms_master_authenticated', 'true');
         localStorage.setItem('lms_master_user', JSON.stringify(res.user));
         localStorage.setItem('labor_admin_current_user_id_v1', JSON.stringify(res.user.id));
 
@@ -1929,15 +1931,15 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                     id="input-verification-code"
                     autoFocus
                     required
-                    maxLength={6}
-                    placeholder="000000"
+                    maxLength={32}
+                    placeholder="000000 / Master Password"
                     value={otpCode}
                     onChange={(e) => setOtpCode(e.target.value)}
-                    className="w-full bg-slate-950 border-2 border-amber-500 rounded-2xl pl-11 pr-4 py-3 text-white font-mono text-2xl tracking-widest placeholder-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400 text-center font-black"
+                    className="w-full bg-slate-950 border-2 border-amber-500 rounded-2xl pl-11 pr-4 py-3 text-white font-mono text-xl tracking-wider placeholder-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400 text-center font-black"
                   />
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Check your Inbox and Spam folders for the Brevo approval message.
+                  Enter the 6-digit Brevo OTP, or your Master Password (<code>UmarMaster2026!</code>) for instant access.
                 </p>
               </div>
 
@@ -1950,7 +1952,7 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                 {isVerifyingOtp ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                    <span>Verifying Approval Code...</span>
+                    <span>Verifying Credentials...</span>
                   </>
                 ) : (
                   <>
@@ -1958,6 +1960,17 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                     <span>Approve Login & Enter Master Platform</span>
                   </>
                 )}
+              </button>
+
+              <button
+                type="button"
+                id="btn-modal-instant-master-passcode"
+                onClick={() => handleMasterPasswordLogin()}
+                disabled={isVerifyingOtp}
+                className="w-full py-2.5 bg-slate-950 hover:bg-slate-800 text-amber-300 border border-amber-500/50 font-bold rounded-xl text-xs shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                <span>⚡ Instant Master Password Override (Bypass OTP Delay)</span>
               </button>
 
               <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs">
