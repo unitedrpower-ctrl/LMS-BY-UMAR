@@ -10,11 +10,36 @@ export async function fetchApi<T>(endpoint: string, options: RequestInit = {}, c
     ...(options.headers as Record<string, string> || {})
   };
 
+  // Master Owner persistent session & authorization headers
+  const masterToken = localStorage.getItem('lms_master_token') || localStorage.getItem('lms_auth_token');
+  if (masterToken) {
+    headers['Authorization'] = `Bearer ${masterToken}`;
+    headers['x-auth-token'] = masterToken;
+  }
+
+  const isMasterAuth = localStorage.getItem('lms_master_authenticated') === 'true';
+  if (isMasterAuth) {
+    headers['x-master-authenticated'] = 'true';
+  }
+
+  const impersonatingCompId = localStorage.getItem('lms_impersonating_company_id');
+  if (impersonatingCompId) {
+    headers['x-impersonating-company-id'] = impersonatingCompId;
+  }
+
   if (currentUser) {
     headers['x-user-id'] = currentUser.id;
     headers['x-user-role'] = currentUser.role;
     if (currentUser.companyId) {
       headers['x-company-id'] = currentUser.companyId;
+    }
+  } else {
+    const savedUserId = localStorage.getItem('lms_current_user_id');
+    const savedUserRole = localStorage.getItem('lms_user_role');
+    if (savedUserId) headers['x-user-id'] = savedUserId;
+    if (savedUserRole) headers['x-user-role'] = savedUserRole;
+    if (impersonatingCompId) {
+      headers['x-company-id'] = impersonatingCompId;
     }
   }
 

@@ -25,7 +25,7 @@ import {
   Eye,
   EyeOff
 } from 'lucide-react';
-import { validateInvitationApi, googleAuthApi, requestMasterOtpApi, verifyMasterOtpApi, registerUserApi, requestPasswordResetApi, resetPasswordApi, workerLoginApi } from '../../lib/api';
+import { validateInvitationApi, googleAuthApi, requestMasterOtpApi, verifyMasterOtpApi, masterPasswordLoginApi, registerUserApi, requestPasswordResetApi, resetPasswordApi, workerLoginApi } from '../../lib/api';
 
 interface PublicAuthGuardViewProps {
   users: User[];
@@ -336,6 +336,7 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
         // 1. Immediately store Auth Token & Session State in localStorage & cookies
         const authToken = res.token || `master-jwt-token-${res.user.id}-${Date.now()}`;
         localStorage.setItem('lms_auth_token', authToken);
+        localStorage.setItem('lms_master_token', authToken);
         localStorage.setItem('lms_current_user_id', res.user.id);
         localStorage.setItem('lms_user_role', 'Owner');
         localStorage.setItem('lms_user_email', res.user.email);
@@ -345,6 +346,7 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
         
         try {
           document.cookie = `lms_master_session=${res.user.id}; path=/; max-age=2592000; SameSite=Lax`;
+          document.cookie = `lms_master_token=${authToken}; path=/; max-age=2592000; SameSite=Lax`;
           document.cookie = `lms_role=Owner; path=/; max-age=2592000; SameSite=Lax`;
         } catch (e) {}
 
@@ -371,7 +373,12 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
         // 3. Trigger global auth login handler
         onLogin(masterUser);
 
-        // 4. Update window hash for router direct navigation
+        // 4. Update window hash and path for router direct navigation
+        if (window.location.pathname.startsWith('/owner')) {
+          window.history.replaceState({}, '', '/owner');
+        } else {
+          window.history.replaceState({}, '', '/master-dashboard');
+        }
         if (window.location.hash !== '#saas_owner') {
           window.location.hash = '#saas_owner';
         }
@@ -381,6 +388,75 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
     } catch (err: any) {
       console.error("[Master OTP Error]", err);
       setErrorMessage(err.message || 'Verification failed. Please check the code and try again.');
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
+  const handleMasterPasswordLogin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+    setIsVerifyingOtp(true);
+
+    try {
+      const emailToUse = masterEmail.trim();
+      const passwordToUse = masterPassword.trim();
+      console.log(`[Master Direct Login] Authenticating master owner credentials for ${emailToUse}`);
+      const res = await masterPasswordLoginApi(emailToUse, passwordToUse);
+
+      if (res.success && res.user) {
+        const authToken = `master-jwt-token-${res.user.id}-${Date.now()}`;
+        localStorage.setItem('lms_auth_token', authToken);
+        localStorage.setItem('lms_master_token', authToken);
+        localStorage.setItem('lms_current_user_id', res.user.id);
+        localStorage.setItem('lms_user_role', 'Owner');
+        localStorage.setItem('lms_user_email', res.user.email);
+        localStorage.setItem('lms_master_authenticated', 'true');
+        localStorage.setItem('lms_master_user', JSON.stringify(res.user));
+        localStorage.setItem('labor_admin_current_user_id_v1', JSON.stringify(res.user.id));
+
+        try {
+          document.cookie = `lms_master_session=${res.user.id}; path=/; max-age=2592000; SameSite=Lax`;
+          document.cookie = `lms_master_token=${authToken}; path=/; max-age=2592000; SameSite=Lax`;
+          document.cookie = `lms_role=Owner; path=/; max-age=2592000; SameSite=Lax`;
+        } catch (e) {}
+
+        const masterUser: User = {
+          ...res.user,
+          role: 'Owner',
+          companyId: 'comp-owner',
+          status: 'Active',
+          profileCompleted: true,
+          adminPermissions: {
+            canViewPayroll: true,
+            canEditPayroll: true,
+            canMarkAttendance: true,
+            canManageSites: true,
+            canManageUsers: true,
+            canAccessSettings: true
+          }
+        };
+
+        setSuccessMessage('👑 Instant Master Password Login Successful! Welcome Platform Master Owner Umar.');
+        setIsVerificationModalOpen(false);
+
+        onLogin(masterUser);
+
+        if (window.location.pathname.startsWith('/owner')) {
+          window.history.replaceState({}, '', '/owner');
+        } else {
+          window.history.replaceState({}, '', '/master-dashboard');
+        }
+        if (window.location.hash !== '#saas_owner') {
+          window.location.hash = '#saas_owner';
+        }
+      } else {
+        setErrorMessage(res.message || 'Invalid Master Password.');
+      }
+    } catch (err: any) {
+      console.error("[Master Direct Login Error]", err);
+      setErrorMessage(err.message || 'Master login failed. Please verify credentials and try again.');
     } finally {
       setIsVerifyingOtp(false);
     }
@@ -1156,77 +1232,74 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
             </div>
           ) : (
             <>
-              {/* Tab Selector Switcher */}
-              {activeTab !== 'forgotPassword' && activeTab !== 'resetPassword' && (
-                <div className={`grid ${isMasterPath || activeTab === 'masterOtp' ? 'grid-cols-4' : 'grid-cols-3'} gap-1 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold`}>
-
-                  {/* Platform Owner tab only visible when explicitly accessing hidden /owner or /master URL */}
-                  {(isMasterPath || activeTab === 'masterOtp') && (
+              {/* Tab Selector Switcher / Master Indicator */}
+              {isMasterPath ? (
+                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-amber-950/60 via-slate-900 to-amber-950/60 border border-amber-500/40 rounded-2xl">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 shrink-0">
+                      <Crown className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-black text-amber-300">Master Owner Authentication Mode</div>
+                      <div className="text-[10px] text-slate-400 font-mono">Hidden Direct Route: /owner • Umar Chaudhary HQ</div>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 bg-amber-500 text-slate-950 text-[10px] font-black rounded-lg uppercase tracking-wider">
+                    Root Only
+                  </span>
+                </div>
+              ) : (
+                activeTab !== 'forgotPassword' && activeTab !== 'resetPassword' && (
+                  <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold">
                     <button
-                      id="tab-btn-master-owner"
+                      id="tab-btn-admin-login"
                       onClick={() => {
-                        setActiveTab('masterOtp');
+                        setActiveTab('adminLogin');
                         setErrorMessage('');
                         setSuccessMessage('');
                       }}
                       className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                        activeTab === 'masterOtp'
-                          ? 'bg-gradient-to-r from-amber-600 to-yellow-600 text-white shadow-md font-black ring-1 ring-amber-400/50'
-                          : 'text-amber-400 hover:text-amber-200 hover:bg-slate-900'
+                        activeTab === 'adminLogin'
+                          ? 'bg-indigo-600 text-white shadow-md font-extrabold'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
                       }`}
                     >
-                      <Crown className="w-3.5 h-3.5 text-amber-200" /> Platform Owner
+                      <ShieldCheck className="w-3.5 h-3.5 text-indigo-200" /> Admin
                     </button>
-                  )}
 
-                  <button
-                    id="tab-btn-admin-login"
-                    onClick={() => {
-                      setActiveTab('adminLogin');
-                      setErrorMessage('');
-                      setSuccessMessage('');
-                    }}
-                    className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                      activeTab === 'adminLogin'
-                        ? 'bg-indigo-600 text-white shadow-md font-extrabold'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                    }`}
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5 text-indigo-200" /> Admin
-                  </button>
+                    <button
+                      id="tab-btn-worker-login"
+                      onClick={() => {
+                        setActiveTab('workerLogin');
+                        setErrorMessage('');
+                        setSuccessMessage('');
+                      }}
+                      className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                        activeTab === 'workerLogin'
+                          ? 'bg-amber-600 text-white shadow-md font-extrabold'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                      }`}
+                    >
+                      <HardHat className="w-3.5 h-3.5 text-amber-200" /> Worker
+                    </button>
 
-                  <button
-                    id="tab-btn-worker-login"
-                    onClick={() => {
-                      setActiveTab('workerLogin');
-                      setErrorMessage('');
-                      setSuccessMessage('');
-                    }}
-                    className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                      activeTab === 'workerLogin'
-                        ? 'bg-amber-600 text-white shadow-md font-extrabold'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                    }`}
-                  >
-                    <HardHat className="w-3.5 h-3.5 text-amber-200" /> Worker
-                  </button>
-
-                  <button
-                    id="tab-btn-signup"
-                    onClick={() => {
-                      setActiveTab('signUp');
-                      setErrorMessage('');
-                      setSuccessMessage('');
-                    }}
-                    className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                      activeTab === 'signUp'
-                        ? 'bg-emerald-600 text-white shadow-md font-extrabold'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                    }`}
-                  >
-                    <UserPlus className="w-3.5 h-3.5 text-emerald-200" /> Sign Up
-                  </button>
-                </div>
+                    <button
+                      id="tab-btn-signup"
+                      onClick={() => {
+                        setActiveTab('signUp');
+                        setErrorMessage('');
+                        setSuccessMessage('');
+                      }}
+                      className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                        activeTab === 'signUp'
+                          ? 'bg-emerald-600 text-white shadow-md font-extrabold'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                      }`}
+                    >
+                      <UserPlus className="w-3.5 h-3.5 text-emerald-200" /> Sign Up
+                    </button>
+                  </div>
+                )
               )}
 
             {/* Status Alerts */}
@@ -1344,12 +1417,32 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                     {isSendingOtp ? (
                       <>
                         <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                        <span>Contacting Brevo Email API...</span>
+                        <span>Dispatching Brevo 2FA Approval Code...</span>
                       </>
                     ) : (
                       <>
                         <KeyRound className="w-4 h-4 text-slate-950" />
-                        <span>Sign In & Send Brevo Approval Code</span>
+                        <span>Sign In & Dispatch Brevo 6-Digit Approval Code</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    id="btn-direct-master-password"
+                    onClick={handleMasterPasswordLogin}
+                    disabled={isVerifyingOtp}
+                    className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/40 font-extrabold rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isVerifyingOtp ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                        <span>Authenticating Master Owner...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Crown className="w-3.5 h-3.5 text-amber-400" />
+                        <span>⚡ Instant Master Password Login (Direct Access)</span>
                       </>
                     )}
                   </button>

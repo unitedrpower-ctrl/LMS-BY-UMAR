@@ -1,0 +1,127 @@
+{
+  "companies": [
+    {
+      "id": "comp-owner",
+      "name": "Master LMS Platform HQ (Umar Owner)",
+      "companyCode": "HQ-001",
+      "company_code": "HQ-001",
+      "crNumber": "1010000000",
+      "adminName": "Umar Chaudhary",
+      "adminEmail": "unitedrpower@gmail.com",
+      "planType": "CUSTOM_ENTERPRISE",
+      "subscriptionStartDate": "2024-01-01",
+      "subscriptionEndDate": "2099-12-31",
+      "maxLaborersAllowed": 99999,
+      "status": "Active",
+      "pricePaidSar": 0,
+      "contactPhone": "+966 50 111 2222",
+      "createdAt": "2024-01-01 00:00",
+      "invitationToken": "inv-tok-owner"
+    },
+    {
+      "id": "comp-001",
+      "name": "Recovered Company (comp-001)",
+      "companyCode": "COMP-002",
+      "company_code": "COMP-002",
+      "adminName": "Tenant Admin",
+      "adminEmail": "tenant.admin@enterprise.sa",
+      "crNumber": "CR-000000",
+      "planType": "1_YEAR",
+      "subscriptionStartDate": "2026-09-08",
+      "subscriptionEndDate": "2027-09-08",
+      "maxLaborersAllowed": 100,
+      "pricePaidSar": 0,
+      "contactPhone": "+966 50 000 0000",
+      "status": "Active",
+      "createdAt": "2026-09-08T07:08:47.086Z",
+      "invitationToken": "inv-tok-001"
+    }
+  ],
+  "users": [
+    {
+      "id": "usr-owner-umar-259",
+      "companyId": "comp-owner",
+      "name": "Umar Chaudhary (Master Owner)",
+      "email": "umarchoudhary259@gmail.com",
+      "role": "Owner",
+      "dailyRate": 350,
+      "phone": "+966 50 259 0000",
+      "designation": "Platform Owner & Master Administrator",
+      "joinedDate": "2024-01-01",
+      "avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+      "iqamaId": "1000000259",
+      "passportNumber": "OWNER-259",
+      "loginSerial": "OWNER-259",
+      "loginPassword": "OwnerPass#259",
+      "status": "Active",
+      "isGoogleUser": true,
+      "profileCompleted": true,
+      "adminPermissions": {
+        "canViewPayroll": true,
+        "canEditPayroll": true,
+        "canMarkAttendance": true,
+        "canManageSites": true,
+        "canManageUsers": true,
+        "canAccessSettings": true
+      }
+    },
+    {
+      "id": "usr-owner-umar",
+      "companyId": "comp-owner",
+      "name": "Umar (System Owner)",
+      "email": "unitedrpower@gmail.com",
+      "role": "Owner",
+      "dailyRate": 350,
+      "phone": "+966 50 111 2222",
+      "designation": "Managing Director & System Owner",
+      "joinedDate": "2024-01-01",
+      "avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+      "iqamaId": "1000000001",
+      "passportNumber": "OWNER-001",
+      "loginSerial": "OWNER-01",
+      "loginPassword": "OwnerPass#1",
+      "status": "Active",
+      "isGoogleUser": true,
+      "profileCompleted": true,
+      "adminPermissions": {
+        "canViewPayroll": true,
+        "canEditPayroll": true,
+        "canMarkAttendance": true,
+        "canManageSites": true,
+        "canManageUsers": true,
+        "canAccessSettings": true
+      }
+    }
+  ],
+  "sites": [],
+  "attendanceRecords": [],
+  "payrolls": [],
+  "complaints": [],
+  "notices": [],
+  "roleInvitations": [
+    {
+      "id": "inv-auto-comp-owner",
+      "companyId": "comp-owner",
+      "email": "unitedrpower@gmail.com",
+      "role": "Super Admin",
+      "token": "inv-tok-owner",
+      "invitedBy": "Platform Owner",
+      "createdAt": "2024-01-01 00:00",
+      "expiresAt": "2026-10-08T07:08:41.399Z",
+      "status": "Pending"
+    },
+    {
+      "id": "inv-universal-1788851327086",
+      "companyId": "comp-001",
+      "email": "tenant.admin@enterprise.sa",
+      "role": "Super Admin",
+      "token": "inv-tok-1785321156162-9509",
+      "invitedBy": "Platform Owner",
+      "createdAt": "2026-09-08T07:08:47.086Z",
+      "expiresAt": "2027-09-08T07:08:47.086Z",
+      "status": "Pending"
+    }
+  ],
+  "documents": [],
+  "lastSavedAt": "2026-09-08T07:32:06.324Z"
+}

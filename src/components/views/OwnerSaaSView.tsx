@@ -40,9 +40,10 @@ import {
 
 interface OwnerSaaSViewProps {
   currentUser: User;
+  onImpersonateCompany?: (company: Company) => void;
 }
 
-export const OwnerSaaSView: React.FC<OwnerSaaSViewProps> = ({ currentUser }) => {
+export const OwnerSaaSView: React.FC<OwnerSaaSViewProps> = ({ currentUser, onImpersonateCompany }) => {
   const [companies, setCompanies] = useState<(Company & {
     activeLaborers: number;
     totalStaff: number;
@@ -638,6 +639,18 @@ export const OwnerSaaSView: React.FC<OwnerSaaSViewProps> = ({ currentUser }) => 
                       {/* Actions */}
                       <td className="p-3.5 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          {comp.id !== 'comp-owner' && onImpersonateCompany && (
+                            <button
+                              id={`btn-impersonate-${comp.id}`}
+                              onClick={() => onImpersonateCompany(comp)}
+                              className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/40 hover:to-yellow-500/40 text-amber-300 border border-amber-500/40 rounded-xl text-[11px] font-black transition-all flex items-center gap-1 cursor-pointer shadow-sm"
+                              title={`Enter and impersonate ${comp.name} administrative portal`}
+                            >
+                              <Crown className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Enter Portal</span>
+                            </button>
+                          )}
+
                           <button
                             onClick={() => {
                               const adminLink = `${window.location.origin}/login/admin?companyToken=${comp.id}`;
