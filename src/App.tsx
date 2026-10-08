@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Site, Attendance, Payroll, Complaint, Notice, DocumentItem, SystemSettings } from './types';
+import { User, Site, Attendance, Payroll, Complaint, Notice, DocumentItem, SystemSettings, Company } from './types';
 import { LanguageCode, I18nProvider } from './lib/i18n';
 import { 
   getInitialState, 
@@ -9,7 +9,6 @@ import {
 } from './lib/storage';
 import { HeaderBar } from './components/HeaderBar';
 import { Navigation } from './components/Navigation';
-import { Crown, Building2 } from 'lucide-react';
 
 // Views
 import { DashboardView } from './components/views/DashboardView';
@@ -25,7 +24,6 @@ import { SqlSchemaView } from './components/views/SqlSchemaView';
 import { ExpressApiView } from './components/views/ExpressApiView';
 import { SettingsView } from './components/views/SettingsView';
 import { SecuritySettingsView } from './components/views/SecuritySettingsView';
-import { OwnerSaaSView } from './components/views/OwnerSaaSView';
 import { SubscriptionExpiredGuard } from './components/SubscriptionExpiredGuard';
 import { AuthModal } from './components/auth/AuthModal';
 import { PublicAuthGuardView } from './components/auth/PublicAuthGuardView';
@@ -38,7 +36,6 @@ import {
   getUsersApi, 
   getSitesApi, 
   saveSiteApi,
-  deleteSiteApi,
   getAttendanceApi, 
   bulkUpdateAttendanceApi,
   getPayrollApi, 
@@ -63,102 +60,46 @@ export default function App() {
   const [documents, setDocuments] = useState<DocumentItem[]>(initial.documents || []);
   const [currentLang, setCurrentLang] = useState<LanguageCode>(initial.currentLang || 'en');
   const [settings, setSettings] = useState<SystemSettings>(initial.settings || {
+    currency: 'SAR',
     fridayPaidHolidayEnabled: true,
     overtimeMultiplierRate: 2.0,
     absencePenaltyMultiplier: 1.0,
-    maxDailyComplaints: 3
+    maxDailyComplaints: 3,
+    govHolidays: []
   });
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
-    const search = window.location.search;
-    const pathname = window.location.pathname.toLowerCase();
-
-    // 1. Check if Master Owner persistent session is active
-    try {
-      const isMasterAuth = localStorage.getItem('lms_master_authenticated') === 'true' || localStorage.getItem('isMasterOwner') === 'true';
-      const masterUserJson = localStorage.getItem('lms_master_user');
-      if (isMasterAuth && masterUserJson) {
-        const parsed = JSON.parse(masterUserJson);
-        if (parsed && parsed.id) {
-          return parsed.id;
-        }
-      }
-    } catch (e) {}
-
-    // 2. Otherwise check if registration / worker invite paths
-    const isRegisterOrWorkerPath = pathname.startsWith('/register') || 
-                                   pathname.startsWith('/accept-invite') || 
-                                   pathname.startsWith('/login/worker') || 
-                                   search.includes('token=') || 
-                                   search.includes('inviteToken=');
-    if (isRegisterOrWorkerPath) {
-      localStorage.removeItem('lms_current_user_id');
-      localStorage.removeItem('lms_user_role');
-      localStorage.removeItem('lms_user_email');
-      localStorage.removeItem('lms_auth_token');
-      localStorage.removeItem('lms_state_' + STORAGE_KEYS.CURRENT_USER_ID);
-      return null;
-    }
-    return initial.currentUserId;
+    return localStorage.getItem('lms_current_user_id') || initial.currentUserId;
   });
-  const [tenantCompany, setTenantCompany] = useState<any>(undefined);
+  
+  // Single Dedicated Company State
+  const [tenantCompany, setTenantCompany] = useState<Company | null>(() => {
+    return {
+      id: 'comp-001',
+      name: 'Al-Bawani Contracting Co.',
+      companyCode: 'BAW-001',
+      company_code: 'BAW-001',
+      crNumber: '1010892741',
+      address: 'King Fahd Road, Olaya District, Riyadh, Saudi Arabia',
+      logoUrl: '/lms_by_umar_icon.jpg',
+      adminName: 'Umar Chaudhary',
+      adminEmail: 'unitedrpower@gmail.com',
+      planType: 'CUSTOM_ENTERPRISE',
+      subscriptionStartDate: '2024-01-01',
+      subscriptionEndDate: '2099-12-31',
+      maxLaborersAllowed: 99999,
+      status: 'Active',
+      pricePaidSar: 0,
+      contactPhone: '+966 50 111 2222',
+      createdAt: '2024-01-01 00:00'
+    };
+  });
+
   const [isMobileFrame, setIsMobileFrame] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<string>(() => {
-    const hash = window.location.hash.replace('#', '').toLowerCase();
-    const pathname = window.location.pathname.toLowerCase();
-    if (
-      hash === 'saas_owner' ||
-      hash === 'master-dashboard' ||
-      hash === 'owner-dashboard' ||
-      hash === 'owner' ||
-      hash === 'master' ||
-      pathname === '/owner' ||
-      pathname.startsWith('/owner/') ||
-      pathname === '/master' ||
-      pathname.startsWith('/master/') ||
-      pathname.startsWith('/master-dashboard')
-    ) {
-      return 'saas_owner';
-    }
-    return 'dashboard';
-  });
+  const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('lms_theme') as 'light' | 'dark') || 'light';
   });
-
-  // Cross-tenant Impersonation state for Master Owner
-  const [impersonatingCompany, setImpersonatingCompany] = useState<any>(() => {
-    try {
-      const saved = localStorage.getItem('lms_impersonating_company');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-
-  const handleImpersonateCompany = (company: any) => {
-    setImpersonatingCompany(company);
-    setTenantCompany(company);
-    localStorage.setItem('lms_impersonating_company', JSON.stringify(company));
-    localStorage.setItem('lms_impersonating_company_id', company.id);
-    setActiveTab('dashboard');
-  };
-
-  const handleExitImpersonation = () => {
-    setImpersonatingCompany(null);
-    localStorage.removeItem('lms_impersonating_company');
-    localStorage.removeItem('lms_impersonating_company_id');
-    const masterUserJson = localStorage.getItem('lms_master_user');
-    if (masterUserJson) {
-      try {
-        const parsed = JSON.parse(masterUserJson);
-        if (parsed?.id) {
-          setCurrentUserId(parsed.id);
-        }
-      } catch (e) {}
-    }
-    setActiveTab('saas_owner');
-  };
 
   // Sync theme class to document element
   useEffect(() => {
@@ -170,76 +111,11 @@ export default function App() {
     localStorage.setItem('lms_theme', theme);
   }, [theme]);
 
-  // Master Owner Persistent Session Restoration & Route Listeners
-  useEffect(() => {
-    try {
-      const isMasterAuth = localStorage.getItem('lms_master_authenticated') === 'true' || localStorage.getItem('isMasterOwner') === 'true';
-      const masterUserJson = localStorage.getItem('lms_master_user');
-      if (isMasterAuth && masterUserJson) {
-        const parsed = JSON.parse(masterUserJson);
-        if (parsed && parsed.id) {
-          setCurrentUserId(parsed.id);
-          setUsers(prev => {
-            if (!prev.find(u => u.id === parsed.id)) {
-              return [parsed, ...prev];
-            }
-            return prev.map(u => u.id === parsed.id ? { ...u, role: 'Owner', companyId: 'comp-owner' } : u);
-          });
-          const pathname = window.location.pathname.toLowerCase();
-          const hash = window.location.hash.toLowerCase();
-          if (
-            pathname === '/owner' ||
-            pathname.startsWith('/owner/') ||
-            pathname === '/master' ||
-            pathname.startsWith('/master/') ||
-            pathname.startsWith('/master-dashboard') ||
-            hash === '#saas_owner' ||
-            hash === '#owner' ||
-            hash === '#master'
-          ) {
-            setActiveTab('saas_owner');
-          }
-        }
-      }
-    } catch (e) {
-      console.warn("Could not restore master owner session:", e);
-    }
-  }, []);
-
-  // Listen to popstate and hashchange to route to /owner or /master dynamically
-  useEffect(() => {
-    const handleUrlRoute = () => {
-      const pathname = window.location.pathname.toLowerCase();
-      const hash = window.location.hash.toLowerCase();
-      const isMasterAuth = localStorage.getItem('lms_master_authenticated') === 'true' || localStorage.getItem('isMasterOwner') === 'true';
-      if (
-        pathname === '/owner' ||
-        pathname.startsWith('/owner/') ||
-        pathname === '/master' ||
-        pathname.startsWith('/master/') ||
-        pathname.startsWith('/master-dashboard') ||
-        hash === '#saas_owner' ||
-        hash === '#owner' ||
-        hash === '#master'
-      ) {
-        if (isMasterAuth) {
-          setActiveTab('saas_owner');
-        }
-      }
-    };
-    window.addEventListener('popstate', handleUrlRoute);
-    window.addEventListener('hashchange', handleUrlRoute);
-    return () => {
-      window.removeEventListener('popstate', handleUrlRoute);
-      window.removeEventListener('hashchange', handleUrlRoute);
-    };
-  }, []);
-
   const handleToggleTheme = () => {
     setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  // Load initial datasets from full-stack backend
+  // Load single-tenant datasets from backend
   useEffect(() => {
     const fetchBackendData = async () => {
       try {
@@ -253,33 +129,34 @@ export default function App() {
           backendNotices,
           backendDocuments
         ] = await Promise.all([
-          getUsersApi(uContext),
-          getSitesApi(uContext),
-          getAttendanceApi(uContext),
-          getPayrollApi(uContext),
-          getComplaintsApi(uContext),
-          getNoticesApi(uContext),
-          getDocumentsApi(uContext)
+          getUsersApi(uContext).catch(() => null),
+          getSitesApi(uContext).catch(() => null),
+          getAttendanceApi(uContext).catch(() => null),
+          getPayrollApi(uContext).catch(() => null),
+          getComplaintsApi(uContext).catch(() => null),
+          getNoticesApi(uContext).catch(() => null),
+          getDocumentsApi(uContext).catch(() => null)
         ]);
 
-        if (backendUsers) setUsers(backendUsers);
-        if (backendSites) setSites(backendSites);
-        if (backendAttendance) setAttendance(backendAttendance);
-        if (backendPayrolls) setPayrolls(backendPayrolls);
-        if (backendComplaints) setComplaints(backendComplaints);
-        if (backendNotices) setNotices(backendNotices);
-        if (backendDocuments) setDocuments(backendDocuments);
+        if (backendUsers && backendUsers.length > 0) setUsers(backendUsers);
+        if (backendSites && backendSites.length > 0) setSites(backendSites);
+        if (backendAttendance && backendAttendance.length > 0) setAttendance(backendAttendance);
+        if (backendPayrolls && backendPayrolls.length > 0) setPayrolls(backendPayrolls);
+        if (backendComplaints && backendComplaints.length > 0) setComplaints(backendComplaints);
+        if (backendNotices && backendNotices.length > 0) setNotices(backendNotices);
+        if (backendDocuments && backendDocuments.length > 0) setDocuments(backendDocuments);
 
-        if (uContext) {
-          try {
-            const myCompRes = await getMyCompanyApi(uContext);
+        // Fetch dedicated single company settings
+        try {
+          const myCompRes = await getMyCompanyApi(uContext);
+          if (myCompRes && myCompRes.company) {
             setTenantCompany(myCompRes.company);
-          } catch {
-            // ignore
           }
+        } catch {
+          // Keep current company state
         }
       } catch (err: any) {
-        console.warn("Failed to load initial datasets from Express backend (falling back to LocalStorage):", err.message);
+        console.warn("Express backend data load notice:", err.message);
       }
     };
 
@@ -289,12 +166,10 @@ export default function App() {
   // Real-Time Attendance & Worker Status Synchronization (SSE Stream + Polling Fallback)
   useEffect(() => {
     if (!currentUserId) return;
-    const uContext = users.find(u => u.id === currentUserId);
-    const compId = uContext?.companyId || 'comp-001';
 
     let eventSource: EventSource | null = null;
     try {
-      eventSource = new EventSource(`/api/events/attendance?companyId=${encodeURIComponent(compId)}&userId=${encodeURIComponent(currentUserId)}`);
+      eventSource = new EventSource(`/api/events/attendance?companyId=comp-001&userId=${encodeURIComponent(currentUserId)}`);
 
       eventSource.onmessage = (event) => {
         try {
@@ -322,15 +197,11 @@ export default function App() {
           // ignore keepalive or parse errors
         }
       };
-
-      eventSource.onerror = () => {
-        // Browser automatically attempts reconnect on drop
-      };
     } catch (sseErr) {
       console.warn("SSE connection error, relying on polling fallback:", sseErr);
     }
 
-    // Reactive backup sync every 12 seconds for full consistency
+    // Backup sync every 15 seconds for consistent live updates
     const pollInterval = setInterval(async () => {
       try {
         const u = users.find(usr => usr.id === currentUserId) || undefined;
@@ -343,12 +214,10 @@ export default function App() {
       } catch {
         // silent polling ignore
       }
-    }, 12000);
+    }, 15000);
 
     return () => {
-      if (eventSource) {
-        eventSource.close();
-      }
+      if (eventSource) eventSource.close();
       clearInterval(pollInterval);
     };
   }, [currentUserId]);
@@ -362,12 +231,12 @@ export default function App() {
         return backendUsers;
       }
     } catch (err: any) {
-      console.warn("Failed to refresh users from Express backend:", err.message);
+      console.warn("Failed to refresh users:", err.message);
     }
     return users;
   };
 
-  // Sync to storage
+  // Sync to local storage
   useEffect(() => saveToStorage(STORAGE_KEYS.USERS, users), [users]);
   useEffect(() => saveToStorage(STORAGE_KEYS.SITES, sites), [sites]);
   useEffect(() => saveToStorage(STORAGE_KEYS.ATTENDANCE, attendance), [attendance]);
@@ -381,72 +250,31 @@ export default function App() {
   useEffect(() => saveToStorage(STORAGE_KEYS.MOBILE_FRAME, isMobileFrame), [isMobileFrame]);
 
   // Current active user object or null if unauthenticated
-  let currentUser = users.find((u) => u.id === currentUserId) || null;
-  if (!currentUser && currentUserId) {
-    try {
-      const isMasterAuth = localStorage.getItem('lms_master_authenticated') === 'true' || localStorage.getItem('isMasterOwner') === 'true';
-      const masterUserJson = localStorage.getItem('lms_master_user');
-      if (isMasterAuth && masterUserJson) {
-        const parsed = JSON.parse(masterUserJson);
-        if (parsed && parsed.id === currentUserId) {
-          currentUser = {
-            ...parsed,
-            role: 'Owner',
-            companyId: 'comp-owner',
-            status: 'Active',
-            profileCompleted: true
-          };
-        }
-      }
-    } catch (e) {}
-  }
-  if (currentUser && (currentUser.email.toLowerCase() === 'umarchoudhary259@gmail.com' || currentUser.email.toLowerCase() === 'umarchaudhary259@gmail.com' || currentUser.email.toLowerCase() === 'unitedrpower@gmail.com')) {
-    if (!currentUser.companyId || currentUser.companyId === 'comp-owner') {
-      if (currentUser.role !== 'Owner' || currentUser.companyId !== 'comp-owner') {
-        currentUser = {
-          ...currentUser,
-          role: 'Owner',
-          companyId: 'comp-owner',
-          status: 'Active',
-          profileCompleted: true
-        };
-      }
-    }
-  }
+  const currentUser = users.find((u) => u.id === currentUserId) || null;
 
   // Enforce role-based route access controls
   useEffect(() => {
     if (!currentUser) return;
-    const normEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
-    const isMaster = currentUser.role === 'Owner';
-
     if (currentUser.role === 'Labor') {
       const allowedLaborTabs = ['dashboard', 'attendance', 'payroll', 'complaints', 'notices', 'security'];
       if (!allowedLaborTabs.includes(activeTab)) {
         setActiveTab('dashboard');
       }
     } else if (currentUser.role === 'Site Supervisor') {
-      const allowedSupervisorTabs = ['dashboard', 'sites', 'attendance', 'payroll', 'complaints', 'notices', 'documents', 'security', 'express_backend'];
+      const allowedSupervisorTabs = ['dashboard', 'sites', 'attendance', 'payroll', 'complaints', 'notices', 'documents', 'security'];
       if (!allowedSupervisorTabs.includes(activeTab)) {
         setActiveTab('dashboard');
       }
-    } else if (!isMaster && activeTab === 'saas_owner') {
-      setActiveTab('dashboard');
     }
   }, [currentUser, activeTab]);
 
   // Auth Handlers
   const handleLogin = (user: User) => {
-    console.log('OTP Success! Redirecting to Master Dashboard...', user);
-
-    // Save tokens and session details
     saveToStorage(STORAGE_KEYS.CURRENT_USER_ID, user.id);
     localStorage.setItem('lms_current_user_id', user.id);
     localStorage.setItem('lms_user_role', user.role);
     localStorage.setItem('lms_user_email', user.email);
-    localStorage.setItem('lms_auth_token', `auth-token-${user.id}-${Date.now()}`);
 
-    // Add or update user in users state
     setUsers((prev) => {
       const idx = prev.findIndex((u) => u.id === user.id || (u.email && u.email.toLowerCase() === user.email.toLowerCase()));
       if (idx >= 0) {
@@ -458,61 +286,22 @@ export default function App() {
     });
 
     setCurrentUserId(user.id);
-
-    // Force navigation route according to role
-    if (user.role === 'Owner') {
-      setActiveTab('saas_owner');
-      if (window.location.pathname.startsWith('/owner')) {
-        window.history.replaceState({}, '', '/owner');
-      } else {
-        window.history.replaceState({}, '', '/master-dashboard');
-      }
-    } else if (user.role === 'Labor') {
-      setActiveTab('dashboard');
-      window.history.replaceState({}, '', '/client-dashboard');
-    } else {
-      setActiveTab('dashboard');
-      window.history.replaceState({}, '', '/client-dashboard');
-    }
-
+    setActiveTab('dashboard');
     setIsAuthModalOpen(false);
+    window.history.replaceState({}, '', '/');
   };
 
   const handleLogout = () => {
-    const isMaster = currentUser?.role === 'Owner' || localStorage.getItem('lms_master_authenticated') === 'true' || localStorage.getItem('isMasterOwner') === 'true';
-    const params = new URLSearchParams(window.location.search);
-    const existingCompToken = currentUser?.companyId || params.get('companyToken') || params.get('company_id') || params.get('companyId') || params.get('tenantId') || params.get('company');
-    const isWorkerSession = currentUser?.role === 'Labor' || window.location.pathname.includes('/login/worker');
-
     setCurrentUserId(null);
     saveToStorage(STORAGE_KEYS.CURRENT_USER_ID, null);
     localStorage.removeItem('lms_current_user_id');
     localStorage.removeItem('lms_user_role');
     localStorage.removeItem('lms_user_email');
     localStorage.removeItem('lms_auth_token');
-    localStorage.removeItem('lms_master_token');
-    localStorage.removeItem('lms_master_authenticated');
-    localStorage.removeItem('isMasterOwner');
-    localStorage.removeItem('lms_master_user');
-    localStorage.removeItem('lms_impersonating_company');
-    localStorage.removeItem('lms_impersonating_company_id');
     localStorage.removeItem('labor_admin_current_user_id_v1');
-    try {
-      document.cookie = 'lms_master_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-      document.cookie = 'lms_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-      document.cookie = 'lms_master_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-    } catch (e) {}
     sessionStorage.clear();
     setIsAuthModalOpen(false);
-
-    if (isMaster) {
-      window.history.replaceState({}, '', '/owner');
-    } else if (existingCompToken && existingCompToken !== 'comp-owner' && existingCompToken !== 'all') {
-      const routePrefix = isWorkerSession ? '/login/worker' : '/login/admin';
-      window.history.replaceState({}, '', `${routePrefix}?companyToken=${existingCompToken}`);
-    } else {
-      window.history.replaceState({}, '', '/');
-    }
+    window.history.replaceState({}, '', '/');
   };
 
   const handleSignUp = async (newUser: User) => {
@@ -520,13 +309,13 @@ export default function App() {
     try {
       await registerUserApi(newUser);
     } catch (e: any) {
-      console.warn("Backend API registration failed or offline:", e.message);
+      console.warn("Registration API call:", e.message);
     }
   };
 
   // Actions
   const handleResetData = () => {
-    if (window.confirm('Reset sample database state to default?')) {
+    if (window.confirm('Reset local sample data to clean state?')) {
       resetAllData();
       window.location.reload();
     }
@@ -549,45 +338,57 @@ export default function App() {
         setSites((prev) => prev.map((s) => (s.id === saved.id ? saved : s)));
       }
     } catch (err: any) {
-      console.warn('[Save Site API Exception]:', err.message);
+      console.warn('[Save Site API]:', err.message);
     }
   };
 
   const handleSaveAttendanceRecords = async (records: Attendance[]) => {
+    // 1. Update local state: if status is empty/None or _delete, remove record cleanly; otherwise update/insert
+    let updatedAttendanceState: Attendance[] = [];
     setAttendance((prev) => {
-      const copy = [...prev];
+      let copy = [...prev];
       records.forEach((rec) => {
+        const isReset = !rec.status || (rec.status as string) === 'None' || (rec.status as string) === 'Empty' || (rec.status as string) === 'Clear' || (rec as any)._delete === true;
         const idx = copy.findIndex((a) => a.userId === rec.userId && a.date === rec.date);
-        if (idx >= 0) {
-          copy[idx] = rec;
+        if (isReset) {
+          if (idx >= 0) {
+            copy.splice(idx, 1);
+          }
         } else {
-          copy.push(rec);
+          if (idx >= 0) {
+            copy[idx] = rec;
+          } else {
+            copy.push(rec);
+          }
         }
       });
+      updatedAttendanceState = copy;
       return copy;
     });
 
     try {
       await bulkUpdateAttendanceApi(records, currentUser || undefined);
     } catch (e: any) {
-      console.warn("Backend bulk update attendance failed or offline:", e.message);
+      console.warn("Bulk attendance API update:", e.message);
     }
 
-    // AUTOMATED RECALCULATION OF MONTHLY SALARY UPON ATTENDANCE UPDATE
+    // Automated Recalculation of Monthly Salary
     records.forEach((rec) => {
       const monthYear = rec.date.substring(0, 7);
       const worker = users.find((u) => u.id === rec.userId);
       if (!worker) return;
 
-      // Find all attendance for this worker in month
-      const userAtt = [...attendance, ...records].filter(
+      const userAtt = updatedAttendanceState.filter(
         (a) => a.userId === rec.userId && a.date.startsWith(monthYear)
       );
 
       const presentDays = userAtt.filter((a) => a.status === 'Present').length;
       const halfDays = userAtt.filter((a) => a.status === 'Half-Day').length;
       const absentDays = userAtt.filter((a) => a.status === 'Absent').length;
-      const totalWorked = presentDays + halfDays * 0.5;
+      const leaveDays = userAtt.filter((a) => a.status === 'Leave').length;
+      const holidayDays = userAtt.filter((a) => a.status === 'Holiday').length;
+      // Effective worked days: full day + 0.5 half day + paid leave + holiday
+      const totalWorked = presentDays + halfDays * 0.5 + leaveDays + holidayDays;
 
       setPayrolls((prevPayrolls) => {
         const existing = prevPayrolls.find((p) => p.userId === rec.userId && p.monthYear === monthYear);
@@ -599,6 +400,7 @@ export default function App() {
 
         const updated: Payroll = {
           id: existing?.id || `pay-${monthYear}-${rec.userId}`,
+          companyId: 'comp-001',
           userId: rec.userId,
           monthYear,
           dailyRate: worker.dailyRate,
@@ -606,6 +408,8 @@ export default function App() {
           presentDays,
           halfDays,
           absentDays,
+          leaveDays,
+          holidayDays,
           allowances,
           advances,
           penalties,
@@ -694,7 +498,7 @@ export default function App() {
     try {
       await saveDocumentApi(doc, currentUser || undefined);
     } catch (err: any) {
-      console.warn("Backend API save document warning:", err.message);
+      console.warn("Save document warning:", err.message);
     }
   };
 
@@ -704,7 +508,7 @@ export default function App() {
       try {
         await deleteDocumentApi(docId, currentUser || undefined);
       } catch (err: any) {
-        console.warn("Backend API delete document warning:", err.message);
+        console.warn("Delete document warning:", err.message);
       }
     }
   };
@@ -723,16 +527,15 @@ export default function App() {
     try {
       await saveUserApi(user, currentUser || undefined);
     } catch (e: any) {
-      console.warn("Backend API save user failed or offline:", e.message);
+      console.warn("Save user warning:", e.message);
     }
   };
 
   const handleDeleteUser = async (userId: string) => {
-    if (!currentUser || currentUser.role !== 'Super Admin') {
+    if (!currentUser || (currentUser.role !== 'Super Admin' && currentUser.role !== 'Owner')) {
       alert('Access Denied: Only Super Admin can permanently delete user records.');
       return;
     }
-    // Hard Delete: Purge user and linked data locally for flawless UX
     setUsers((prev) => prev.filter((u) => u.id !== userId));
     setAttendance((prev) => prev.filter((a) => a.userId !== userId));
     setPayrolls((prev) => prev.filter((p) => p.userId !== userId));
@@ -741,18 +544,17 @@ export default function App() {
     try {
       await deleteUserApi(userId, currentUser);
     } catch (e: any) {
-      console.warn("Backend API Delete failed or offline:", e.message);
+      console.warn("Delete user warning:", e.message);
     }
   };
 
   const handleUpdatePassword = async (userId: string, newPassword: string) => {
-    if (!currentUser || currentUser.role !== 'Super Admin') {
+    if (!currentUser || (currentUser.role !== 'Super Admin' && currentUser.role !== 'Owner')) {
       alert('Access Denied: Only Super Admin can manage staff passwords.');
       return;
     }
     
-    // Simulate bcrypt hash storage locally
-    const localHash = `$2b$10$${Math.random().toString(36).substring(2, 12)}BcryptHashedUmarLMS`;
+    const localHash = `$2b$10$${Math.random().toString(36).substring(2, 12)}BcryptHashed`;
     setUsers((prev) =>
       prev.map((u) => (u.id === userId ? { ...u, loginPassword: localHash } : u))
     );
@@ -765,13 +567,13 @@ export default function App() {
         );
       }
     } catch (e: any) {
-      console.warn("Backend API Password update failed or offline:", e.message);
+      console.warn("Password update warning:", e.message);
     }
   };
 
   const unresolvedComplaintsCount = complaints.filter((c) => c.status === 'Pending').length;
 
-  // GLOBAL AUTHENTICATION GUARD: If unauthenticated, restrict access to Public Access Auth Screen only
+  // GLOBAL AUTHENTICATION GUARD: If unauthenticated, show Clean Dedicated Login
   if (!currentUser) {
     return (
       <I18nProvider currentLang={currentLang} onLanguageChange={setCurrentLang}>
@@ -919,24 +721,8 @@ export default function App() {
         );
       case 'sql_workbench':
         return <SqlSchemaView />;
-      case 'saas_owner':
-        return (
-          <OwnerSaaSView 
-            currentUser={currentUser} 
-            onImpersonateCompany={handleImpersonateCompany}
-          />
-        );
       default:
         return null;
-    }
-  };
-
-  const handleRefreshTenantCompany = async () => {
-    try {
-      const res = await getMyCompanyApi(currentUser);
-      setTenantCompany(res.company);
-    } catch {
-      // ignore
     }
   };
 
@@ -983,31 +769,11 @@ export default function App() {
                 lang={currentLang}
               />
 
-              {/* Master Owner Cross-Tenant Impersonation Sticky Banner (Mobile) */}
-              {currentUser.role === 'Owner' && impersonatingCompany && (
-                <div 
-                  id="master-owner-impersonation-banner-mobile"
-                  className="bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-500 text-slate-950 px-3 py-1.5 text-[11px] font-black flex items-center justify-between gap-1 shadow-md sticky top-0 z-40 border-b border-amber-600 shrink-0"
-                >
-                  <div className="flex items-center gap-1.5 truncate">
-                    <Crown className="w-3.5 h-3.5 text-slate-950 shrink-0" />
-                    <span className="truncate">Viewing: <strong>{impersonatingCompany.name}</strong></span>
-                  </div>
-                  <button
-                    onClick={handleExitImpersonation}
-                    className="px-2 py-0.5 bg-slate-950 text-white rounded-lg text-[10px] font-extrabold transition-all cursor-pointer shrink-0"
-                  >
-                    Exit HQ
-                  </button>
-                </div>
-              )}
-
               {/* Mobile Content Area */}
               <main className="flex-1 overflow-y-auto p-4 bg-slate-100 text-slate-900">
                 <SubscriptionExpiredGuard 
                   currentUser={currentUser} 
-                  company={tenantCompany} 
-                  onRefreshStatus={handleRefreshTenantCompany}
+                  company={tenantCompany || undefined}
                 >
                   {renderActiveView()}
                 </SubscriptionExpiredGuard>
@@ -1051,42 +817,10 @@ export default function App() {
               lang={currentLang}
             />
 
-            {/* Master Owner Cross-Tenant Impersonation Sticky Banner (Desktop) */}
-            {currentUser.role === 'Owner' && impersonatingCompany && (
-              <div 
-                id="master-owner-impersonation-banner"
-                className="bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-500 text-slate-950 px-4 py-2.5 text-xs font-black flex flex-wrap items-center justify-between gap-2 shadow-lg sticky top-0 z-40 border-b border-amber-600 shrink-0"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="p-1.5 bg-slate-950 text-amber-400 rounded-lg shrink-0">
-                    <Crown className="w-4 h-4" />
-                  </span>
-                  <span>
-                    👑 MASTER OWNER CROSS-TENANT IMPERSONATION: Viewing tenant <strong className="underline text-slate-950 font-black">{impersonatingCompany.name}</strong> (CR: {impersonatingCompany.crNumber || 'N/A'})
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setActiveTab('saas_owner')}
-                    className="px-3 py-1 bg-slate-900 hover:bg-slate-950 text-amber-300 rounded-xl text-xs font-extrabold transition-all cursor-pointer shadow-sm flex items-center gap-1"
-                  >
-                    <Building2 className="w-3.5 h-3.5" /> All Tenants
-                  </button>
-                  <button
-                    onClick={handleExitImpersonation}
-                    className="px-3 py-1 bg-slate-950 hover:bg-black text-white rounded-xl text-xs font-extrabold transition-all cursor-pointer shadow-md flex items-center gap-1 border border-amber-400/40"
-                  >
-                    ← Exit to Master Owner HQ
-                  </button>
-                </div>
-              </div>
-            )}
-
             <main className="flex-1 w-full min-h-screen px-4 sm:px-6 lg:px-8 py-6">
               <SubscriptionExpiredGuard 
                 currentUser={currentUser} 
-                company={tenantCompany} 
-                onRefreshStatus={handleRefreshTenantCompany}
+                company={tenantCompany || undefined}
               >
                 {renderActiveView()}
               </SubscriptionExpiredGuard>
@@ -1095,7 +829,7 @@ export default function App() {
         )}
 
         {/* Post-Login Mandatory Profile Completion Guard Modal */}
-        {currentUser && currentUser.profileCompleted === false && currentUser.role !== 'Owner' && (
+        {currentUser && currentUser.profileCompleted === false && (
           <CompleteProfileModal
             currentUser={currentUser}
             onProfileSaved={(updatedUser) => {
@@ -1105,7 +839,7 @@ export default function App() {
         )}
 
         {/* Force Password Change Modal for First-Time Admin Logins */}
-        {currentUser && currentUser.mustChangePassword === true && currentUser.role !== 'Labor' && currentUser.role !== 'Owner' && (
+        {currentUser && currentUser.mustChangePassword === true && currentUser.role !== 'Labor' && (
           <ForcePasswordChangeModal
             currentUser={currentUser}
             onPasswordChanged={(updatedUser) => {

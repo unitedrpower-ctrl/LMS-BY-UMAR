@@ -42,7 +42,7 @@ export interface RoleInvitation {
   acceptedUserId?: string;
 }
 
-export type AttendanceStatus = 'Present' | 'Absent' | 'Half-Day';
+export type AttendanceStatus = 'Present' | 'Holiday' | 'Absent' | 'Leave' | 'Half-Day';
 
 export type ComplaintStatus = 'Pending' | 'In Progress' | 'Resolved';
 
@@ -133,6 +133,8 @@ export interface Payroll {
   presentDays: number;
   halfDays: number;
   absentDays: number;
+  leaveDays?: number; // Sick Leave / Approved Leave days
+  holidayDays?: number; // Configured / Site Holiday days
   fridayHolidayDays?: number; // Paid Friday holidays
   fridayPay?: number; // Friday base pay in SAR
   govHolidayDays?: number; // Paid government holidays

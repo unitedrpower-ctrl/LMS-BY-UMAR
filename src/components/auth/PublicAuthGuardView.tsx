@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { User, UserRole, RoleInvitation } from '../../types';
+import React, { useState } from 'react';
+import { User, UserRole } from '../../types';
 import { LanguageCode, getTranslation } from '../../lib/i18n';
 import { 
   Lock, 
@@ -12,20 +12,18 @@ import {
   CheckCircle2, 
   AlertTriangle, 
   Clock,
-  Briefcase,
-  ShieldAlert,
-  ArrowRight,
-  Upload,
   RefreshCw,
-  X,
-  Crown,
-  Sparkles,
   Building2,
   Globe,
-  Eye,
-  EyeOff
+  Sparkles
 } from 'lucide-react';
-import { validateInvitationApi, googleAuthApi, requestMasterOtpApi, verifyMasterOtpApi, masterPasswordLoginApi, registerUserApi, requestPasswordResetApi, resetPasswordApi, workerLoginApi } from '../../lib/api';
+import { 
+  googleAuthApi, 
+  workerLoginApi, 
+  adminLoginApi, 
+  requestPasswordResetApi, 
+  resetPasswordApi 
+} from '../../lib/api';
 
 interface PublicAuthGuardViewProps {
   users: User[];
@@ -46,33 +44,12 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
 }) => {
   const t = (key: string, fallback?: string) => getTranslation(lang, key, fallback);
 
-  const isMasterRoute = window.location.pathname.includes('/master-login') || 
-                        window.location.pathname.includes('/master') ||
-                        window.location.hash.includes('master-login') ||
-                        window.location.hash.includes('master') ||
-                        window.location.search.includes('master=true') || 
-                        window.location.search.includes('owner=true');
-
-  const isAdminRoute = window.location.pathname.includes('/login/admin') ||
-                       window.location.pathname.includes('/admin-login') ||
-                       window.location.search.includes('admin=true');
-
-  const isClientRoute = window.location.pathname.includes('/client-login') || 
-                        window.location.pathname.includes('/client') ||
-                        window.location.search.includes('client=true');
-
-  const isWorkerRoute = (window.location.pathname.includes('/login/worker') || 
-                        window.location.pathname.includes('/worker-login') ||
-                        isClientRoute) && !isAdminRoute && !isMasterRoute;
-
-  const [activeTab, setActiveTab] = useState<'adminLogin' | 'workerLogin' | 'signUp' | 'masterOtp' | 'forgotPassword' | 'resetPassword'>(
-    isMasterRoute ? 'masterOtp' : (isWorkerRoute ? 'workerLogin' : 'adminLogin')
-  );
+  const [activeTab, setActiveTab] = useState<'adminLogin' | 'workerLogin' | 'signUp' | 'forgotPassword' | 'resetPassword'>('adminLogin');
 
   // Form States
   const [emailOrSerial, setEmailOrSerial] = useState('');
   const [password, setPassword] = useState('');
-  const [workerCompanyCode, setWorkerCompanyCode] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   
   // Password Reset States
   const [resetPasswordToken, setResetPasswordToken] = useState<string | null>(null);
@@ -81,74 +58,12 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [isSubmittingReset, setIsSubmittingReset] = useState(false);
   
-  // Master Owner Authentication States
-  const [masterEmail, setMasterEmail] = useState('umarchoudhary259@gmail.com');
-  const [masterPassword, setMasterPassword] = useState('UmarMaster2026!');
-  const [showMasterPassword, setShowMasterPassword] = useState(false);
-  const [otpCode, setOtpCode] = useState('');
-  const [activeOtpSent, setActiveOtpSent] = useState<boolean>(false);
-  const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
-  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
-  const [otpCountdown, setOtpCountdown] = useState(0);
-
-  // Check if current URL matches the hidden Master Owner authentication route
-  const checkIsMasterHiddenRoute = () => {
-    const path = window.location.pathname.toLowerCase();
-    const hash = window.location.hash.toLowerCase();
-    const search = window.location.search.toLowerCase();
-    return (
-      path === '/owner' ||
-      path.startsWith('/owner/') ||
-      path === '/master' ||
-      path.startsWith('/master/') ||
-      path === '/master-login' ||
-      path.startsWith('/master-login/') ||
-      hash === '#owner' ||
-      hash.startsWith('#owner') ||
-      hash === '#master' ||
-      hash.startsWith('#master') ||
-      hash.includes('master-login') ||
-      search.includes('owner=true') ||
-      search.includes('master=true')
-    );
-  };
-
-  const [isMasterPath, setIsMasterPath] = useState<boolean>(() => checkIsMasterHiddenRoute());
-
-  // Route and Hash Listeners for hidden /owner and /master routes
-  useEffect(() => {
-    const handleRouteCheck = () => {
-      const isMaster = checkIsMasterHiddenRoute();
-      setIsMasterPath(isMaster);
-      if (isMaster) {
-        setActiveTab('masterOtp');
-      }
-    };
-    handleRouteCheck();
-    window.addEventListener('hashchange', handleRouteCheck);
-    window.addEventListener('popstate', handleRouteCheck);
-    return () => {
-      window.removeEventListener('hashchange', handleRouteCheck);
-      window.removeEventListener('popstate', handleRouteCheck);
-    };
-  }, []);
-
-  // OTP Countdown timer
-  useEffect(() => {
-    let timer: any;
-    if (otpCountdown > 0) {
-      timer = setTimeout(() => setOtpCountdown(prev => prev - 1), 1000);
-    }
-    return () => clearTimeout(timer);
-  }, [otpCountdown]);
-  
   // Sign up fields
   const [name, setName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [designation, setDesignation] = useState('');
-  const [requestedRole, setRequestedRole] = useState<UserRole>('HR Admin');
+  const [requestedRole, setRequestedRole] = useState<UserRole>('Labor');
   const [signupPassword, setSignupPassword] = useState('');
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
@@ -159,16 +74,14 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [pendingUserEmail, setPendingUserEmail] = useState<string | null>(null);
-  const [isCheckingStatus, setIsCheckingStatus] = useState<boolean>(false);
-  const [refreshMessage, setRefreshMessage] = useState<string>('');
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState('');
 
-  // Role Invitation Token State
-  const [inviteToken, setInviteToken] = useState<string | null>(null);
-  const [invitationData, setInvitationData] = useState<RoleInvitation | null>(null);
-  const [isClientInviteFlow, setIsClientInviteFlow] = useState<boolean>(false);
-
-  // Google Authentication & Profile Completion Workflow
-  const [googleProfileToComplete, setGoogleProfileToComplete] = useState<{ name: string; email: string } | null>(null);
+  // Google Auth Profile Completion Modal State
+  const [googleProfileToComplete, setGoogleProfileToComplete] = useState<{
+    email: string;
+    name: string;
+  } | null>(null);
   const [googleIqamaId, setGoogleIqamaId] = useState('');
   const [googlePassportNumber, setGooglePassportNumber] = useState('');
   const [googlePhone, setGooglePhone] = useState('');
@@ -177,76 +90,33 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
   const [googleIban, setGoogleIban] = useState('');
   const [isGoogleProcessing, setIsGoogleProcessing] = useState(false);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tok = params.get('inviteToken') || params.get('token');
-    const resetTok = params.get('resetToken');
-    const compParam = params.get('companyCode') || params.get('code') || params.get('company') || params.get('companyId') || params.get('companyToken') || params.get('company_id') || params.get('tenantId');
-    const isRegisterPath = window.location.pathname.startsWith('/register') || window.location.pathname.startsWith('/accept-invite');
-    
-    if (compParam) {
-      setWorkerCompanyCode(compParam.toUpperCase());
-    }
-
-    if (resetTok) {
-      setResetPasswordToken(resetTok);
-      setActiveTab('resetPassword');
-      setSuccessMessage('🔑 Secure Password Reset Code detected. Please specify your new strong password below.');
-    } else if (tok || isRegisterPath) {
-      setIsClientInviteFlow(true);
-    }
-
-    if (tok) {
-      setInviteToken(tok);
-      validateInvitationApi(tok, compParam || undefined)
-        .then(res => {
-          if (res.valid && res.invitation) {
-            setInvitationData(res.invitation);
-            if (res.initialPassword) {
-              setSignupPassword(res.initialPassword);
-            }
-            setSuccessMessage(`🌟 Official Role Invitation Verified! Invited for email "${res.invitation.email}" as ${res.invitation.role}. Please complete the form below to claim!`);
-          } else {
-            setErrorMessage(`Invitation Error: ${res.error || 'Invalid or expired invitation link'}`);
-          }
-        })
-        .catch(err => {
-          setErrorMessage(`Invitation Error: ${err.message || 'Invalid or expired invitation link'}`);
-        });
-    }
-  }, []);
-
-  // Central Google Auth Execution Handler (Calls Real Backend API)
-  const executeGoogleAuth = async (googleName: string, googleEmail: string, extraData?: {
-    iqamaId?: string;
-    passportNumber?: string;
-    phone?: string;
-    bankName?: string;
-    accountNumber?: string;
-    iban?: string;
-  }) => {
-    setIsGoogleProcessing(true);
+  // Google Sign-In Simulation
+  const handleGoogleSignIn = async () => {
     setErrorMessage('');
-    setSuccessMessage('');
+    setIsGoogleProcessing(true);
 
     try {
-      const payload = {
-        name: googleName,
-        email: googleEmail,
-        inviteToken: inviteToken || undefined,
-        iqamaId: extraData?.iqamaId || googleIqamaId,
-        passportNumber: extraData?.passportNumber || googlePassportNumber,
-        phone: extraData?.phone || googlePhone,
-        bankName: extraData?.bankName || googleBankName,
-        accountNumber: extraData?.accountNumber || googleAccountNumber,
-        iban: extraData?.iban || googleIban
-      };
+      const simulatedGoogleEmail = `user.${Math.random().toString(36).substring(2, 7)}@gmail.com`;
+      const simulatedGoogleName = 'Google Authenticated Staff';
+      await executeGoogleAuth(simulatedGoogleName, simulatedGoogleEmail);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Google Authentication failed.');
+      setIsGoogleProcessing(false);
+    }
+  };
 
-      const res = await googleAuthApi(payload);
+  const executeGoogleAuth = async (name: string, email: string, extraProfile?: any) => {
+    try {
+      const res = await googleAuthApi({
+        name,
+        email,
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+        ...extraProfile
+      });
 
-      if (res.userNeededDetails) {
-        // Needs Iqama ID & Passport
-        setGoogleProfileToComplete({ name: googleName, email: googleEmail });
+      if (res.requireProfileCompletion) {
+        setGoogleProfileToComplete({ email, name });
+        setSuccessMessage('Google Account authenticated! Please complete your residency profile.');
       } else if (res.user) {
         if (res.user.status === 'Pending') {
           setPendingUserEmail(res.user.email);
@@ -293,297 +163,114 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
     setGoogleProfileToComplete(null);
   };
 
-  // Master Owner Email OTP Handlers
-  const handleRequestMasterOtp = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    setErrorMessage('');
-    setSuccessMessage('');
-    setIsSendingOtp(true);
-
-    try {
-      const emailToUse = masterEmail.trim();
-      const res = await requestMasterOtpApi(emailToUse, masterPassword.trim());
-      if (res.success) {
-        setActiveOtpSent(true);
-        setIsVerificationModalOpen(true);
-        setOtpCode(''); // Strict: No pre-fill, ready for manual input
-        setOtpCountdown(60);
-        setSuccessMessage(`A 6-digit login approval verification code has been dispatched to ${emailToUse} via Brevo Email API.`);
-      } else {
-        setErrorMessage(res.message || 'Failed to dispatch verification code.');
-      }
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to dispatch Master Owner verification code.');
-    } finally {
-      setIsSendingOtp(false);
-    }
-  };
-
-  const handleVerifyMasterOtp = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    setErrorMessage('');
-    setSuccessMessage('');
-    setIsVerifyingOtp(true);
-
-    try {
-      const emailToUse = masterEmail.trim();
-      console.log(`[Master OTP Verification] Verifying code for ${emailToUse}`);
-      const res = await verifyMasterOtpApi(emailToUse, otpCode.trim());
-      
-      if (res.success && res.user) {
-        console.log('OTP Success! Redirecting to Master Dashboard...', res.user);
-        
-        // 1. Immediately store Auth Token & Session State in localStorage & cookies
-        const authToken = res.token || `master-jwt-token-${res.user.id}-${Date.now()}`;
-        localStorage.setItem('isMasterOwner', 'true');
-        localStorage.setItem('lms_master_authenticated', 'true');
-        localStorage.setItem('lms_auth_token', authToken);
-        localStorage.setItem('lms_master_token', authToken);
-        localStorage.setItem('lms_current_user_id', res.user.id);
-        localStorage.setItem('lms_user_role', 'Owner');
-        localStorage.setItem('lms_user_email', res.user.email);
-        localStorage.setItem('lms_master_user', JSON.stringify(res.user));
-        localStorage.setItem('labor_admin_current_user_id_v1', JSON.stringify(res.user.id));
-        
-        try {
-          document.cookie = `lms_master_session=${res.user.id}; path=/; max-age=2592000; SameSite=Lax`;
-          document.cookie = `lms_master_token=${authToken}; path=/; max-age=2592000; SameSite=Lax`;
-          document.cookie = `lms_role=Owner; path=/; max-age=2592000; SameSite=Lax`;
-        } catch (e) {}
-
-        setSuccessMessage('👑 Approval Verified! Welcome Platform Master Owner Umar.');
-        setIsVerificationModalOpen(false);
-
-        // 2. Prepare user object with role = 'Owner'
-        const masterUser: User = {
-          ...res.user,
-          role: 'Owner',
-          companyId: 'comp-owner',
-          status: 'Active',
-          profileCompleted: true,
-          adminPermissions: {
-            canViewPayroll: true,
-            canEditPayroll: true,
-            canMarkAttendance: true,
-            canManageSites: true,
-            canManageUsers: true,
-            canAccessSettings: true
-          }
-        };
-
-        // 3. Trigger global auth login handler
-        onLogin(masterUser);
-
-        // 4. Update window hash and path for router direct navigation
-        if (window.location.pathname.startsWith('/owner')) {
-          window.history.replaceState({}, '', '/owner');
-        } else {
-          window.history.replaceState({}, '', '/master-dashboard');
-        }
-        if (window.location.hash !== '#saas_owner') {
-          window.location.hash = '#saas_owner';
-        }
-      } else {
-        setErrorMessage(res.message || 'Invalid 6-digit verification code.');
-      }
-    } catch (err: any) {
-      console.error("[Master OTP Error]", err);
-      setErrorMessage(err.message || 'Verification failed. Please check the code and try again.');
-    } finally {
-      setIsVerifyingOtp(false);
-    }
-  };
-
-  const handleMasterPasswordLogin = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    setErrorMessage('');
-    setSuccessMessage('');
-    setIsVerifyingOtp(true);
-
-    try {
-      const emailToUse = masterEmail.trim();
-      const passwordToUse = masterPassword.trim();
-      console.log(`[Master Direct Login] Authenticating master owner credentials for ${emailToUse}`);
-      const res = await masterPasswordLoginApi(emailToUse, passwordToUse);
-
-      if (res.success && res.user) {
-        const authToken = `master-jwt-token-${res.user.id}-${Date.now()}`;
-        localStorage.setItem('isMasterOwner', 'true');
-        localStorage.setItem('lms_master_authenticated', 'true');
-        localStorage.setItem('lms_auth_token', authToken);
-        localStorage.setItem('lms_master_token', authToken);
-        localStorage.setItem('lms_current_user_id', res.user.id);
-        localStorage.setItem('lms_user_role', 'Owner');
-        localStorage.setItem('lms_user_email', res.user.email);
-        localStorage.setItem('lms_master_user', JSON.stringify(res.user));
-        localStorage.setItem('labor_admin_current_user_id_v1', JSON.stringify(res.user.id));
-
-        try {
-          document.cookie = `lms_master_session=${res.user.id}; path=/; max-age=2592000; SameSite=Lax`;
-          document.cookie = `lms_master_token=${authToken}; path=/; max-age=2592000; SameSite=Lax`;
-          document.cookie = `lms_role=Owner; path=/; max-age=2592000; SameSite=Lax`;
-        } catch (e) {}
-
-        const masterUser: User = {
-          ...res.user,
-          role: 'Owner',
-          companyId: 'comp-owner',
-          status: 'Active',
-          profileCompleted: true,
-          adminPermissions: {
-            canViewPayroll: true,
-            canEditPayroll: true,
-            canMarkAttendance: true,
-            canManageSites: true,
-            canManageUsers: true,
-            canAccessSettings: true
-          }
-        };
-
-        setSuccessMessage('👑 Instant Master Password Login Successful! Welcome Platform Master Owner Umar.');
-        setIsVerificationModalOpen(false);
-
-        onLogin(masterUser);
-
-        if (window.location.pathname.startsWith('/owner')) {
-          window.history.replaceState({}, '', '/owner');
-        } else {
-          window.history.replaceState({}, '', '/master-dashboard');
-        }
-        if (window.location.hash !== '#saas_owner') {
-          window.location.hash = '#saas_owner';
-        }
-      } else {
-        setErrorMessage(res.message || 'Invalid Master Password.');
-      }
-    } catch (err: any) {
-      console.error("[Master Direct Login Error]", err);
-      setErrorMessage(err.message || 'Master login failed. Please verify credentials and try again.');
-    } finally {
-      setIsVerifyingOtp(false);
-    }
-  };
-
-  // Handle Admin / Staff Login
-  const handleAdminLoginSubmit = (e: React.FormEvent) => {
+  // Handle Admin / Staff Login (Single-Tenant Dedicated Direct Login)
+  const handleAdminLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
-
-    const params = new URLSearchParams(window.location.search);
-    const companyTokenParam = params.get('companyToken') || params.get('company_id') || params.get('companyId') || params.get('tenantId') || params.get('company');
+    setIsLoggingIn(true);
 
     const cleanInput = emailOrSerial.toLowerCase().trim();
-    const isMasterOwnerEmail = (email?: string) => email && ['umarchoudhary259@gmail.com', 'umarchaudhary259@gmail.com', 'unitedrpower@gmail.com'].includes(email.trim().toLowerCase());
+    const cleanPass = password.trim();
 
+    try {
+      // 1. Try server endpoint
+      const apiRes = await adminLoginApi({
+        emailOrSerial: cleanInput,
+        password: cleanPass
+      });
+
+      if (apiRes && apiRes.success && apiRes.user) {
+        onLogin(apiRes.user);
+        return;
+      }
+    } catch (err: any) {
+      console.warn('[Admin API Login attempt]:', err.message);
+    } finally {
+      setIsLoggingIn(false);
+    }
+
+    // 2. Client-side local lookup fallback
     const target = users.find(
       (u) => 
         (u.email.toLowerCase() === cleanInput || 
-         u.loginSerial?.toLowerCase() === cleanInput)
+         u.loginSerial?.toLowerCase() === cleanInput ||
+         u.id.toLowerCase() === cleanInput) &&
+        u.role !== 'Labor'
     );
 
     if (!target) {
-      setErrorMessage(
-        companyTokenParam
-          ? `Admin account "${emailOrSerial}" was not found under company portal "${companyTokenParam}". Please verify credentials.`
-          : 'Account not found. Please verify your Email Address or Serial Number.'
+      // If not found in non-labor, check if user is a laborer trying to use admin tab
+      const isWorker = users.some(u => 
+        (u.email.toLowerCase() === cleanInput || u.loginSerial?.toLowerCase() === cleanInput) &&
+        u.role === 'Labor'
       );
+      if (isWorker) {
+        setErrorMessage('Worker account detected. Please switch to the "Worker Portal Login" tab.');
+      } else {
+        setErrorMessage('Account not found. Please verify your Email Address or Login Serial.');
+      }
       return;
     }
 
-    // Strict Company Scope Check (bypass for master platform owner)
-    if (companyTokenParam && companyTokenParam !== 'all' && !isMasterOwnerEmail(target.email) && target.role !== 'Owner') {
-      const isMatchingCompany = 
-        target.companyId === companyTokenParam ||
-        (target.companyId && target.companyId.toLowerCase() === companyTokenParam.toLowerCase()) ||
-        (target.companyId && target.companyId.replace('comp-', '') === companyTokenParam.replace('comp-', ''));
-
-      if (!isMatchingCompany) {
-        setErrorMessage(
-          `🔴 Access Denied: Admin account "${emailOrSerial}" belongs to workspace "${target.companyId || 'Default'}" and cannot log in to company portal "${companyTokenParam}". Please use your company's dedicated login URL.`
-        );
-        return;
-      }
-    }
-
-    if (target.loginPassword && target.loginPassword !== password && !target.loginPassword.startsWith('$2b$10$')) {
+    if (target.loginPassword && target.loginPassword !== cleanPass && !target.loginPassword.startsWith('$2b$10$')) {
       setErrorMessage('Invalid Password. Please check your credentials.');
       return;
     }
 
-    // Check Approval Status
     if (target.status === 'Pending') {
-      setErrorMessage(
-        '⚠️ Account Pending Approval: Your registration request is currently under review by a Super Admin. You will gain access once approved.'
-      );
-      return;
-    }
-
-    if (target.status === 'Rejected') {
-      setErrorMessage('❌ Your account registration request has been declined by an administrator.');
+      setErrorMessage('⚠️ Account Pending Approval: Your registration request is currently under review by a Super Admin.');
       return;
     }
 
     if (target.status === 'Inactive' || target.status === 'Suspended') {
-      setErrorMessage('🔴 Account Deactivated/Suspended: Please contact HR or Super Admin to reactivate your profile.');
+      setErrorMessage('🔴 Account Deactivated/Suspended: Please contact HR to reactivate your profile.');
       return;
     }
 
-    const loggedInAdmin: User = {
-      ...target,
-      companyId: target.companyId || companyTokenParam || 'comp-001'
-    };
-
-    onLogin(loggedInAdmin);
+    onLogin(target);
   };
 
-  // Handle Worker Login (Unique Company Code Authentication Engine)
+  // Handle Worker Login (Single-Tenant Dedicated: Serial / Iqama / Email + Password Only, NO COMPANY CODE)
   const handleWorkerLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
+    setIsLoggingIn(true);
 
-    const cleanCompanyCode = workerCompanyCode.trim().toUpperCase();
     const cleanInput = emailOrSerial.trim();
     const cleanPass = password.trim();
 
-    if (!cleanCompanyCode) {
-      setErrorMessage('Please enter your Organization / Company Code (e.g. BAW-001 or ZCON-005).');
-      return;
-    }
-
     if (!cleanInput) {
       setErrorMessage('Please enter your Worker Login Serial ID, Iqama ID, or Email.');
+      setIsLoggingIn(false);
       return;
     }
 
     if (!cleanPass) {
       setErrorMessage('Please enter your Worker Password.');
+      setIsLoggingIn(false);
       return;
     }
 
     try {
       const apiRes = await workerLoginApi({
-        companyCode: cleanCompanyCode,
         serialNumber: cleanInput,
         password: cleanPass
       });
 
-      if (apiRes.success && apiRes.user) {
+      if (apiRes && apiRes.success && apiRes.user) {
         onLogin(apiRes.user);
-        return;
-      } else if (apiRes.error) {
-        setErrorMessage(apiRes.error);
         return;
       }
     } catch (apiErr: any) {
-      console.warn('[Worker Login API]:', apiErr.message);
-      setErrorMessage(apiErr.message || 'Worker login failed. Please verify your 3 credentials.');
-      return;
+      console.warn('[Worker Login API attempt]:', apiErr.message);
+    } finally {
+      setIsLoggingIn(false);
     }
 
-    // Client-side fallback if backend API is unreachable
-    let matchingWorkers = users.filter((u) => u.role === 'Labor' || u.role === 'Site Supervisor');
+    // Client-side local lookup fallback
+    const matchingWorkers = users.filter((u) => u.role === 'Labor' || u.role === 'Site Supervisor');
     const target = matchingWorkers.find(
       (u) => 
         (u.loginSerial?.toLowerCase() === cleanInput.toLowerCase() || 
@@ -593,12 +280,12 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
     );
 
     if (!target) {
-      setErrorMessage(`Worker "${cleanInput}" was not found under company "${cleanCompanyCode}". Please check your credentials.`);
+      setErrorMessage(`Worker "${cleanInput}" was not found. Please verify your Serial Number or Iqama ID.`);
       return;
     }
 
     if (target.loginPassword && target.loginPassword !== cleanPass && !target.loginPassword.startsWith('$2b$10$')) {
-      setErrorMessage('Incorrect Worker Password. Please verify password with HR.');
+      setErrorMessage('Incorrect Worker Password. Please verify your password with HR.');
       return;
     }
 
@@ -658,20 +345,13 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
     try {
       const res = await resetPasswordApi(resetPasswordToken, newPassword);
       if (res.success) {
-        setSuccessMessage('🎉 Password reset successful! Redirecting you to your company login portal...');
+        setSuccessMessage('🎉 Password reset successful! Redirecting you to login...');
         setNewPassword('');
         setConfirmNewPassword('');
         setResetPasswordToken(null);
         setTimeout(() => {
-          const companyParam = res.companyId ? `?company=${res.companyId}` : '';
-          if (res.role === 'Labor') {
-            window.location.href = `/login/worker${companyParam}`;
-          } else if (res.role === 'Owner') {
-            window.location.href = `/master-login`;
-          } else {
-            window.location.href = `/login/admin${companyParam}`;
-          }
-        }, 3000);
+          setActiveTab('adminLogin');
+        }, 2000);
       } else {
         setErrorMessage(res.message || 'Failed to reset password.');
       }
@@ -703,7 +383,7 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
       name: name.trim(),
       email: signupEmail.trim(),
       role: requestedRole,
-      dailyRate: requestedRole === 'Labor' ? 60.0 : 150.0,
+      dailyRate: requestedRole === 'Labor' ? 70.0 : 150.0,
       phone,
       designation: designation || `${requestedRole} (Pending Registration)`,
       joinedDate: new Date().toISOString().split('T')[0],
@@ -711,7 +391,7 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
       bankName: bankName || undefined,
       accountNumber: accountNumber || undefined,
       iban: iban || undefined,
-      loginSerial: `REG-${Math.floor(1000 + Math.random() * 9000)}`,
+      loginSerial: `EMP-${Math.floor(100 + Math.random() * 900)}`,
       loginPassword: signupPassword,
       status: 'Pending'
     };
@@ -732,68 +412,6 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
     setAccountNumber('');
     setIban('');
     setSignupAvatar('');
-  };
-
-  // Handle Client Workspace Active Registration from Invitation
-  const handleInviteRegisterSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    if (!name.trim() || !signupPassword.trim()) {
-      setErrorMessage('Please complete all required fields (*).');
-      return;
-    }
-
-    const regEmail = invitationData ? invitationData.email : signupEmail.trim();
-    const regRole = invitationData ? invitationData.role : 'Super Admin';
-    const regCompanyId = invitationData ? invitationData.companyId : 'comp-001';
-
-    if (!regEmail) {
-      setErrorMessage('No email address is associated with this workspace activation flow.');
-      return;
-    }
-
-    const newUser: User = {
-      id: `usr-reg-${Date.now()}`,
-      name: name.trim(),
-      email: regEmail,
-      role: regRole,
-      dailyRate: regRole === 'Labor' ? 60.0 : 150.0,
-      phone,
-      iqamaId: googleIqamaId || undefined,
-      passportNumber: googlePassportNumber || undefined,
-      designation: designation || `${regRole} (Active Tenant Workspace)`,
-      joinedDate: new Date().toISOString().split('T')[0],
-      avatar: signupAvatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-      bankName: bankName || undefined,
-      accountNumber: accountNumber || undefined,
-      iban: iban || undefined,
-      loginSerial: `REG-${Math.floor(1000 + Math.random() * 9000)}`,
-      loginPassword: signupPassword,
-      status: 'Active', // Pre-approved via invitation!
-      companyId: regCompanyId,
-      profileCompleted: true
-    };
-
-    try {
-      const res = await registerUserApi(newUser, inviteToken || undefined);
-      if (res && (res.success || res.id)) {
-        const returnedUser = res.user || newUser;
-        setSuccessMessage(`🎉 Activation Successful! Logged in as ${regRole} for company workspace ${regCompanyId}.`);
-        setTimeout(() => {
-          onLogin(returnedUser);
-        }, 1200);
-      } else {
-        onSignUp(newUser);
-        setSuccessMessage(`🎉 Workspace registration request submitted successfully!`);
-        setTimeout(() => {
-          onLogin(newUser);
-        }, 1200);
-      }
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Workspace registration failed. Please try again.');
-    }
   };
 
   // Refresh Status Handler for Waiting Screen
@@ -829,14 +447,6 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
     }
   };
 
-  // Quick Demo Shortcut
-  const handleQuickDemo = (userId: string) => {
-    const demoUser = users.find((u) => u.id === userId);
-    if (demoUser) {
-      onLogin(demoUser);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4 sm:p-6 relative overflow-hidden font-sans">
       {/* Background Subtle Gradient Lights */}
@@ -844,7 +454,7 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
       <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
 
       {/* Main Container Card */}
-      <div className="w-full max-w-xl bg-slate-900/90 border border-slate-800 rounded-3xl shadow-2xl backdrop-blur-xl p-6 sm:p-8 space-y-6 relative z-10">
+      <div className="w-full max-w-lg bg-slate-900/90 border border-slate-800 rounded-3xl shadow-2xl backdrop-blur-xl p-6 sm:p-8 space-y-6 relative z-10">
         
         {/* Top Language Toggle in Auth Card */}
         {onLanguageChange && (
@@ -885,9 +495,9 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
             </p>
           </div>
 
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-950/80 border border-indigo-800/60 rounded-full text-[11px] text-indigo-300 font-semibold shadow-inner">
-            <ShieldAlert className="w-3.5 h-3.5 text-indigo-400" />
-            <span>{t('roleSuperAdmin', 'Global Authentication Guard Active')}</span>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-950/80 border border-slate-800 rounded-full text-[11px] text-slate-300 font-semibold shadow-inner">
+            <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Al-Bawani Contracting Co. • Workforce Portal</span>
           </div>
         </div>
 
@@ -957,7 +567,7 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
               </span>
               <h2 className="text-lg font-black text-white">Complete Your Labor Profile</h2>
               <p className="text-xs text-slate-400">
-                Please provide your official residency and travel document details to complete your registration in LMS by Umar.
+                Please provide your official residency and travel document details to complete your registration in LMS.
               </p>
             </div>
 
@@ -1065,244 +675,74 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                   onClick={() => setGoogleProfileToComplete(null)}
                   className="w-1/3 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition-all cursor-pointer"
                 >
-                  Cancel Connect
+                  Cancel
                 </button>
                 <button
                   type="submit"
                   className="w-2/3 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-1.5"
                 >
-                  <UserPlus className="w-4 h-4" /> Submit Profile & Request Approval
+                  <UserPlus className="w-4 h-4" /> Submit Profile
                 </button>
               </div>
             </form>
           </div>
         ) : (
-          isClientInviteFlow ? (
-            <div className="space-y-5 py-2 text-left animate-in fade-in zoom-in duration-300">
-              <div className="text-center space-y-1">
-                <span className="px-3 py-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 rounded-full text-[10px] font-extrabold uppercase tracking-widest inline-flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
-                  Client Workspace Registration
-                </span>
-                <h2 className="text-xl font-black text-white">Activate Your LMS Tenant Workspace</h2>
-                <p className="text-xs text-slate-400">
-                  Register below to claim and activate your isolated company workspace.
-                </p>
-              </div>
-
-              {errorMessage && (
-                <div className="p-3 bg-rose-950/90 border border-rose-800 text-rose-200 rounded-2xl text-xs flex items-start gap-2.5">
-                  <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
-                  <div className="leading-relaxed">{errorMessage}</div>
-                </div>
-              )}
-
-              {successMessage && (
-                <div className="p-3 bg-emerald-950/90 border border-emerald-800 text-emerald-200 rounded-2xl text-xs flex items-start gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                  <div className="leading-relaxed">{successMessage}</div>
-                </div>
-              )}
-
-              {invitationData ? (
-                <div className="p-4 bg-slate-950 border border-indigo-500/20 rounded-2xl space-y-3 text-xs shadow-inner">
-                  <h3 className="text-indigo-400 font-extrabold text-xs border-b border-slate-900 pb-2 flex items-center gap-1.5">
-                    <Briefcase className="w-3.5 h-3.5 text-indigo-400" />
-                    Verified Invitation Workspace Details
-                  </h3>
-                  <div className="grid grid-cols-2 gap-y-2 gap-x-4">
-                    <div className="text-slate-400">Company Tenant ID:</div>
-                    <div className="text-white font-extrabold text-right">{invitationData.companyId}</div>
-
-                    <div className="text-slate-400">Assigned Role:</div>
-                    <div className="text-indigo-300 font-extrabold text-right bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 inline-block justify-self-end">{invitationData.role}</div>
-
-                    <div className="text-slate-400">Authorized Email:</div>
-                    <div className="text-white font-mono font-bold text-right text-[11px] truncate">{invitationData.email}</div>
-
-                    <div className="text-slate-400">Invited By:</div>
-                    <div className="text-slate-300 text-right">{invitationData.invitedBy}</div>
-
-                    <div className="text-slate-400">Valid Until:</div>
-                    <div className="text-rose-400 font-bold text-right">{invitationData.expiresAt}</div>
-                  </div>
-                </div>
-              ) : !errorMessage ? (
-                <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl text-center space-y-2.5 text-xs">
-                  <Clock className="w-6 h-6 text-indigo-400 animate-spin mx-auto animate-duration-1000" />
-                  <div className="text-slate-400">Verifying security token and client credentials...</div>
-                </div>
-              ) : null}
-
-              <form onSubmit={handleInviteRegisterSubmit} className="space-y-4 text-xs">
-                <div>
-                  <label className="block font-bold text-slate-300 mb-1 font-sans">Your Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    disabled={!invitationData}
-                    placeholder="Mohammed Al-Otaibi"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-300 mb-1">Invited Email Address (Read-only)</label>
-                  <input
-                    type="email"
-                    readOnly
-                    disabled
-                    value={invitationData ? invitationData.email : ''}
-                    placeholder={errorMessage ? "Verification failed" : "Verifying email..."}
-                    className="w-full bg-slate-950 border border-slate-900 rounded-xl px-3 py-2.5 text-slate-400 font-mono focus:outline-none font-bold disabled:opacity-50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-300 mb-1">Confirm Initial Password *</label>
-                  <input
-                    type="password"
-                    required
-                    disabled={!invitationData}
-                    placeholder="••••••••"
-                    value={signupPassword}
-                    onChange={(e) => setSignupPassword(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-300 mb-1">Iqama / Residency ID (Optional)</label>
-                    <input
-                      type="text"
-                      maxLength={10}
-                      disabled={!invitationData}
-                      placeholder="e.g. 2100984712"
-                      value={googleIqamaId}
-                      onChange={(e) => setGoogleIqamaId(e.target.value.replace(/\D/g, ''))}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-300 mb-1">Passport Number (Optional)</label>
-                    <input
-                      type="text"
-                      disabled={!invitationData}
-                      placeholder="e.g. N1029384"
-                      value={googlePassportNumber}
-                      onChange={(e) => setGooglePassportNumber(e.target.value.toUpperCase())}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-300 mb-1">Phone Number (Optional)</label>
-                  <input
-                    type="text"
-                    disabled={!invitationData}
-                    placeholder="e.g. +966 50 123 4567"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  />
-                </div>
-
+          <>
+            {/* Clean Tab Selector: Admin Login | Worker Login | Sign Up */}
+            {activeTab !== 'forgotPassword' && activeTab !== 'resetPassword' && (
+              <div className="grid grid-cols-3 gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold">
                 <button
-                  type="submit"
-                  id="btn-submit-invite-register"
-                  disabled={!invitationData}
-                  className="w-full py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  id="tab-btn-admin-login"
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('adminLogin');
+                    setErrorMessage('');
+                    setSuccessMessage('');
+                  }}
+                  className={`py-2.5 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    activeTab === 'adminLogin'
+                      ? 'bg-indigo-600 text-white shadow-md font-extrabold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                  }`}
                 >
-                  <CheckCircle2 className="w-4 h-4" /> Activate & Sign In
+                  <ShieldCheck className="w-4 h-4 text-indigo-200" /> Admin / Staff
                 </button>
 
-                <div className="pt-2 border-t border-slate-800 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => setIsClientInviteFlow(false)}
-                    className="text-slate-500 hover:text-slate-300 font-bold transition-colors"
-                  >
-                    Return to Main Portal Login
-                  </button>
-                </div>
-              </form>
-            </div>
-          ) : (
-            <>
-              {/* Tab Selector Switcher / Master Indicator */}
-              {isMasterPath ? (
-                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-amber-950/60 via-slate-900 to-amber-950/60 border border-amber-500/40 rounded-2xl">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 shrink-0">
-                      <Crown className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-black text-amber-300">Master Owner Authentication Mode</div>
-                      <div className="text-[10px] text-slate-400 font-mono">Hidden Direct Route: /owner • Umar Chaudhary HQ</div>
-                    </div>
-                  </div>
-                  <span className="px-2.5 py-1 bg-amber-500 text-slate-950 text-[10px] font-black rounded-lg uppercase tracking-wider">
-                    Root Only
-                  </span>
-                </div>
-              ) : (
-                activeTab !== 'forgotPassword' && activeTab !== 'resetPassword' && (
-                  <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold">
-                    <button
-                      id="tab-btn-admin-login"
-                      onClick={() => {
-                        setActiveTab('adminLogin');
-                        setErrorMessage('');
-                        setSuccessMessage('');
-                      }}
-                      className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                        activeTab === 'adminLogin'
-                          ? 'bg-indigo-600 text-white shadow-md font-extrabold'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                      }`}
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5 text-indigo-200" /> Admin
-                    </button>
+                <button
+                  id="tab-btn-worker-login"
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('workerLogin');
+                    setErrorMessage('');
+                    setSuccessMessage('');
+                  }}
+                  className={`py-2.5 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    activeTab === 'workerLogin'
+                      ? 'bg-amber-600 text-white shadow-md font-extrabold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                  }`}
+                >
+                  <HardHat className="w-4 h-4 text-amber-200" /> Worker Portal
+                </button>
 
-                    <button
-                      id="tab-btn-worker-login"
-                      onClick={() => {
-                        setActiveTab('workerLogin');
-                        setErrorMessage('');
-                        setSuccessMessage('');
-                      }}
-                      className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                        activeTab === 'workerLogin'
-                          ? 'bg-amber-600 text-white shadow-md font-extrabold'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                      }`}
-                    >
-                      <HardHat className="w-3.5 h-3.5 text-amber-200" /> Worker
-                    </button>
-
-                    <button
-                      id="tab-btn-signup"
-                      onClick={() => {
-                        setActiveTab('signUp');
-                        setErrorMessage('');
-                        setSuccessMessage('');
-                      }}
-                      className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                        activeTab === 'signUp'
-                          ? 'bg-emerald-600 text-white shadow-md font-extrabold'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                      }`}
-                    >
-                      <UserPlus className="w-3.5 h-3.5 text-emerald-200" /> Sign Up
-                    </button>
-                  </div>
-                )
-              )}
+                <button
+                  id="tab-btn-signup"
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('signUp');
+                    setErrorMessage('');
+                    setSuccessMessage('');
+                  }}
+                  className={`py-2.5 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    activeTab === 'signUp'
+                      ? 'bg-emerald-600 text-white shadow-md font-extrabold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                  }`}
+                >
+                  <UserPlus className="w-4 h-4 text-emerald-200" /> Sign Up
+                </button>
+              </div>
+            )}
 
             {/* Status Alerts */}
             {errorMessage && (
@@ -1318,700 +758,405 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                 <div className="leading-relaxed">{successMessage}</div>
               </div>
             )}
-          </>
-        ) )}
 
-        {/* Tab Forms Wrapper for non-invite flow */}
-        {!isClientInviteFlow && (
-          <>
-            {/* Tab 0: Dedicated Master Owner Login Pathway */}
-            {activeTab === 'masterOtp' && (
-              <div className="space-y-4 text-xs">
-                <div className="p-3.5 bg-gradient-to-r from-amber-950/80 via-slate-900 to-amber-950/80 border border-amber-500/50 rounded-2xl text-amber-200 flex items-start gap-3 shadow-lg shadow-amber-950/40">
-                  <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 shrink-0">
-                    <Crown className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <strong className="block text-white text-xs font-black tracking-wide">
-                      Platform Master Owner Authentication
-                    </strong>
-                    <p className="text-[11px] text-amber-300/90 leading-relaxed mt-0.5">
-                      Direct platform root access. Bypasses standard company code requirements and authenticates directly against Master Owner credentials via Brevo Email OTP.
-                    </p>
+            {/* Tab 1: Admin & Staff Login */}
+            {activeTab === 'adminLogin' && (
+              <form onSubmit={handleAdminLoginSubmit} className="space-y-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">Email Address or Admin Login Serial</label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                    <input
+                      id="input-admin-email"
+                      type="text"
+                      required
+                      placeholder="e.g. unitedrpower@gmail.com or hr@lms.com"
+                      value={emailOrSerial}
+                      onChange={(e) => setEmailOrSerial(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
+                    />
                   </div>
                 </div>
 
-                <form onSubmit={handleRequestMasterOtp} className="space-y-3.5">
-                  <div>
-                    <label className="block font-bold text-slate-300 mb-1">
-                      Master Owner Email Address
-                    </label>
-                    <div className="relative">
-                      <Mail className="w-4 h-4 absolute left-3 top-3 text-amber-500" />
-                      <input
-                        type="email"
-                        required
-                        id="input-master-email"
-                        value={masterEmail}
-                        onChange={(e) => setMasterEmail(e.target.value)}
-                        placeholder="umarchoudhary259@gmail.com"
-                        className="w-full bg-slate-950 border border-amber-500/40 rounded-xl pl-9 pr-3 py-2.5 text-white font-mono placeholder-slate-600 focus:outline-none focus:border-amber-400 font-bold"
-                      />
-                    </div>
-                    {/* Quick Email Selection Chips */}
-                    <div className="flex items-center gap-2 mt-1.5 text-[10px]">
-                      <span className="text-slate-500 font-semibold">Quick Select:</span>
-                      <button
-                        type="button"
-                        onClick={() => setMasterEmail('umarchoudhary259@gmail.com')}
-                        className="text-amber-400 hover:text-amber-300 font-mono underline cursor-pointer"
-                      >
-                        umarchoudhary259@gmail.com
-                      </button>
-                      <span className="text-slate-600">•</span>
-                      <button
-                        type="button"
-                        onClick={() => setMasterEmail('unitedrpower@gmail.com')}
-                        className="text-amber-400 hover:text-amber-300 font-mono underline cursor-pointer"
-                      >
-                        unitedrpower@gmail.com
-                      </button>
-                    </div>
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">Password</label>
+                  <div className="relative">
+                    <KeyRound className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                    <input
+                      id="input-admin-password"
+                      type="password"
+                      required
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
+                    />
                   </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block font-bold text-slate-300">
-                        Master Owner Password
-                      </label>
-                      <span className="text-[10px] text-slate-500 font-mono">
-                        (Default: UmarMaster2026!)
-                      </span>
-                    </div>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 absolute left-3 top-3 text-amber-500" />
-                      <input
-                        type={showMasterPassword ? 'text' : 'password'}
-                        required
-                        id="input-master-password"
-                        value={masterPassword}
-                        onChange={(e) => setMasterPassword(e.target.value)}
-                        placeholder="••••••••••••"
-                        className="w-full bg-slate-950 border border-amber-500/40 rounded-xl pl-9 pr-10 py-2.5 text-white font-mono placeholder-slate-600 focus:outline-none focus:border-amber-400 font-bold"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowMasterPassword(!showMasterPassword)}
-                        className="absolute right-3 top-3 text-slate-400 hover:text-white cursor-pointer"
-                        title={showMasterPassword ? 'Hide password' : 'Show password'}
-                      >
-                        {showMasterPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
+                  <div className="text-right mt-1.5">
+                    <button
+                      type="button"
+                      id="btn-forgot-password-link"
+                      onClick={() => {
+                        setActiveTab('forgotPassword');
+                        setErrorMessage('');
+                        setSuccessMessage('');
+                      }}
+                      className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold transition-all cursor-pointer hover:underline"
+                    >
+                      Forgot Password?
+                    </button>
                   </div>
+                </div>
 
-                  <button
-                    type="submit"
-                    id="btn-request-master-otp"
-                    disabled={isSendingOtp}
-                    className="w-full py-3 bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-slate-950 font-black rounded-xl text-xs shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                  >
-                    {isSendingOtp ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                        <span>Dispatching Brevo 2FA Approval Code...</span>
-                      </>
-                    ) : (
-                      <>
-                        <KeyRound className="w-4 h-4 text-slate-950" />
-                        <span>Sign In & Dispatch Brevo 6-Digit Approval Code</span>
-                      </>
-                    )}
-                  </button>
+                <button
+                  type="submit"
+                  id="btn-submit-admin-login"
+                  disabled={isLoggingIn}
+                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <UserCheck className="w-4 h-4" /> {isLoggingIn ? 'Authenticating...' : 'Log In as Admin / Staff'}
+                </button>
 
-                  <button
-                    type="button"
-                    id="btn-direct-master-password"
-                    onClick={handleMasterPasswordLogin}
-                    disabled={isVerifyingOtp}
-                    className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/40 font-extrabold rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                  >
-                    {isVerifyingOtp ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
-                        <span>Authenticating Master Owner...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Crown className="w-3.5 h-3.5 text-amber-400" />
-                        <span>⚡ Instant Master Password Login (Direct Access)</span>
-                      </>
-                    )}
-                  </button>
-
-                  <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] text-slate-400 flex items-start gap-2">
-                    <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <span>
-                      Requires 2FA Brevo approval code verification. Direct route bypasses company code requirements.
-                    </span>
-                  </div>
-
-                  <div className="text-center pt-1">
+                {/* Quick 1-Click Demo Logins for Testing */}
+                <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-2xl space-y-1.5">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                    ⚡ Quick Demo Credentials (Click to fill):
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
                     <button
                       type="button"
                       onClick={() => {
-                        setActiveTab('adminLogin');
-                        setIsMasterPath(false);
-                        window.history.replaceState({}, '', '/');
+                        setEmailOrSerial('unitedrpower@gmail.com');
+                        setPassword('admin123');
                       }}
-                      className="text-slate-500 hover:text-slate-300 font-semibold text-xs transition-colors cursor-pointer"
+                      className="px-2.5 py-1 bg-slate-800 hover:bg-indigo-900/60 text-slate-200 border border-slate-700 hover:border-indigo-500 rounded-lg text-[10px] font-mono transition-all cursor-pointer"
                     >
-                      ← Return to Standard Company Login
+                      🛡️ Super Admin (Umar)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmailOrSerial('hr@lms.com');
+                        setPassword('hr123');
+                      }}
+                      className="px-2.5 py-1 bg-slate-800 hover:bg-indigo-900/60 text-slate-200 border border-slate-700 hover:border-indigo-500 rounded-lg text-[10px] font-mono transition-all cursor-pointer"
+                    >
+                      👔 HR Admin (Khalid)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmailOrSerial('supervisor@lms.com');
+                        setPassword('sup123');
+                      }}
+                      className="px-2.5 py-1 bg-slate-800 hover:bg-indigo-900/60 text-slate-200 border border-slate-700 hover:border-indigo-500 rounded-lg text-[10px] font-mono transition-all cursor-pointer"
+                    >
+                      🏗️ Supervisor (Tariq)
                     </button>
                   </div>
+                </div>
 
-                  {activeOtpSent && (
-                    <div className="text-center pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setIsVerificationModalOpen(true)}
-                        className="text-amber-400 hover:text-amber-300 font-bold text-xs underline cursor-pointer"
-                      >
-                        Code already sent? Click here to open Approval Code modal
-                      </button>
-                    </div>
-                  )}
-                </form>
-              </div>
+                {/* Google Sign In option */}
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={handleGoogleSignIn}
+                    disabled={isGoogleProcessing}
+                    className="w-full py-2.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-200 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <img src="https://www.google.com/favicon.ico" alt="Google Logo" className="w-3.5 h-3.5" />
+                    <span>{isGoogleProcessing ? 'Connecting Google...' : 'Sign in with Google Account'}</span>
+                  </button>
+                </div>
+              </form>
             )}
 
-        {/* Tab 1: Admin & Staff Login */}
-        {activeTab === 'adminLogin' && (
-          <form onSubmit={handleAdminLoginSubmit} className="space-y-4 text-xs">
-            {(() => {
-              const params = new URLSearchParams(window.location.search);
-              const compToken = params.get('companyToken') || params.get('company_id') || params.get('companyId') || params.get('tenantId') || params.get('company');
-              if (!compToken) return null;
-              return (
-                <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-2xl text-purple-300 text-xs font-semibold flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Building2 className="w-4 h-4 text-purple-400 shrink-0" />
-                    <span>Dedicated Company Admin Portal: <strong className="text-white font-mono">{compToken}</strong></span>
+            {/* Tab 2: Worker Login (Dedicated Single-Tenant: NO Company Code Input!) */}
+            {activeTab === 'workerLogin' && (
+              <form onSubmit={handleWorkerLoginSubmit} className="space-y-4 text-xs">
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-300 text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-extrabold text-amber-200">
+                    <HardHat className="w-4 h-4 text-amber-400" />
+                    <span>Worker Attendance & Pay Slip Portal</span>
                   </div>
-                  <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 text-[10px] font-bold rounded uppercase font-mono">
-                    Scoped
-                  </span>
+                  <p className="text-[11px] text-amber-300/80 leading-relaxed">
+                    Log in directly using your Worker Serial ID (or Iqama ID) and Password to view your attendance history, salary slips, and submit site requests.
+                  </p>
                 </div>
-              );
-            })()}
 
-            <div>
-              <label className="block font-bold text-slate-300 mb-1">Email Address or Admin Login Serial</label>
-              <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
-                <input
-                  type="text"
-                  required
-                  placeholder="admin@laborcorp.com or ADMIN-001"
-                  value={emailOrSerial}
-                  onChange={(e) => setEmailOrSerial(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
-                />
-              </div>
-            </div>
+                {/* Input 1: Worker Serial / Email / Iqama */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-300">Worker Serial ID / Iqama ID / Email *</label>
+                    <span className="text-[10px] text-slate-500 font-mono">e.g. EMP-101 or 2481029381</span>
+                  </div>
+                  <div className="relative">
+                    <HardHat className="w-4 h-4 absolute left-3 top-3 text-amber-500" />
+                    <input
+                      id="worker-input-serial"
+                      type="text"
+                      required
+                      placeholder="e.g. EMP-101 or 2481029381"
+                      value={emailOrSerial}
+                      onChange={(e) => setEmailOrSerial(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl pl-9 pr-3 py-2.5 text-white uppercase font-mono placeholder-slate-600 focus:outline-none font-bold"
+                    />
+                  </div>
+                </div>
 
-            <div>
-              <label className="block font-bold text-slate-300 mb-1">Password</label>
-              <div className="relative">
-                <KeyRound className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
-                />
-              </div>
-              <div className="text-right mt-1.5">
+                {/* Input 2: Password */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-300">Worker Password *</label>
+                    <span className="text-[10px] text-slate-500 font-mono">Default: 123456</span>
+                  </div>
+                  <div className="relative">
+                    <KeyRound className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                    <input
+                      id="worker-input-password"
+                      type="password"
+                      required
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none font-medium"
+                    />
+                  </div>
+                </div>
+
                 <button
-                  type="button"
-                  id="btn-forgot-password-link"
-                  onClick={() => {
-                    setActiveTab('forgotPassword');
-                    setErrorMessage('');
-                    setSuccessMessage('');
-                  }}
-                  className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold transition-all cursor-pointer hover:underline"
+                  type="submit"
+                  id="btn-submit-worker-login"
+                  disabled={isLoggingIn}
+                  className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
-                  Forgot Password?
+                  <HardHat className="w-4 h-4" /> {isLoggingIn ? 'Verifying...' : 'Access My Worker Portal'}
                 </button>
-              </div>
-            </div>
 
-            <button
-              type="submit"
-              id="btn-submit-admin-login"
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2"
-            >
-              <UserCheck className="w-4 h-4" /> Log In as Admin / Staff
-            </button>
-
-          </form>
-        )}
-
-        {/* Tab 2: Worker Login */}
-        {activeTab === 'workerLogin' && (
-          <form onSubmit={handleWorkerLoginSubmit} className="space-y-4 text-xs">
-            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-300 text-xs space-y-1.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 font-extrabold text-amber-200">
-                  <HardHat className="w-4 h-4 text-amber-400" />
-                  <span>3-Factor Worker Authentication</span>
-                </div>
-                <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] font-black rounded uppercase font-mono">
-                  Multi-Tenant Scoped
-                </span>
-              </div>
-              <p className="text-[11px] text-amber-300/80 leading-relaxed">
-                Provide your unique 3 credentials: Organization Code, Worker Serial ID, and Access Password.
-              </p>
-            </div>
-
-            {/* Input 1: Company Code */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block font-bold text-slate-300">1. Company / Organization Code *</label>
-                <span className="text-[10px] text-slate-500 font-mono">e.g. BAW-001 or ZCON-005</span>
-              </div>
-              <div className="relative">
-                <Building2 className="w-4 h-4 absolute left-3 top-3 text-amber-500" />
-                <input
-                  id="worker-input-company-code"
-                  type="text"
-                  required
-                  placeholder="e.g. BAW-001, ZCON-005, MBN-001"
-                  value={workerCompanyCode}
-                  onChange={(e) => setWorkerCompanyCode(e.target.value.toUpperCase())}
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl pl-9 pr-3 py-2.5 text-white uppercase font-mono tracking-wider placeholder-slate-600 focus:outline-none font-extrabold"
-                />
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                <span className="text-[10px] text-slate-500">Quick select:</span>
-                {[
-                  { label: 'BAW-001 (Bawabat)', code: 'BAW-001' },
-                  { label: 'ZCON-005 (Z Constr)', code: 'ZCON-005' },
-                  { label: 'MBN-001 (MBN)', code: 'MBN-001' },
-                  { label: 'SCON-002 (Saudi Con)', code: 'SCON-002' },
-                  { label: 'ALR-003 (Al-Rashid)', code: 'ALR-003' },
-                ].map(item => (
-                  <button
-                    key={item.code}
-                    type="button"
-                    onClick={() => setWorkerCompanyCode(item.code)}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
-                      workerCompanyCode === item.code
-                        ? 'bg-amber-500 text-slate-950 shadow-sm'
-                        : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-slate-800'
-                    }`}
-                  >
-                    {item.code}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Input 2: Worker Serial / Email / Iqama */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block font-bold text-slate-300">2. Worker Login ID / Serial / Email *</label>
-                <span className="text-[10px] text-slate-500 font-mono">e.g. LMS-001-001 or EMP-1001</span>
-              </div>
-              <div className="relative">
-                <HardHat className="w-4 h-4 absolute left-3 top-3 text-amber-500" />
-                <input
-                  id="worker-input-serial"
-                  type="text"
-                  required
-                  placeholder="e.g. LMS-001-001, EMP-1001, or 2100984712"
-                  value={emailOrSerial}
-                  onChange={(e) => setEmailOrSerial(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl pl-9 pr-3 py-2.5 text-white uppercase font-mono placeholder-slate-600 focus:outline-none font-bold"
-                />
-              </div>
-            </div>
-
-            {/* Input 3: Password */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block font-bold text-slate-300">3. Worker Password *</label>
-                <span className="text-[10px] text-slate-500 font-mono">Default: 123</span>
-              </div>
-              <div className="relative">
-                <KeyRound className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
-                <input
-                  id="worker-input-password"
-                  type="password"
-                  required
-                  placeholder="Enter worker password (e.g. 123)"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none font-medium"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              id="btn-submit-worker-login"
-              className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
-            >
-              <HardHat className="w-4 h-4" /> Authenticate & Access Worker Portal
-            </button>
-
-          </form>
-        )}
-
-        {/* Tab 3: Sign Up / Register */}
-        {activeTab === 'signUp' && (
-          <form onSubmit={handleSignUpSubmit} className="space-y-4 text-xs">
-            <div className="p-3.5 bg-slate-950/80 border border-emerald-500/30 rounded-2xl space-y-2">
-              <span className="text-xs font-black text-emerald-400 uppercase tracking-wider block">
-                Simplified Quick Registration
-              </span>
-              <p className="text-[11px] text-slate-300 leading-relaxed">
-                Enter your basic details or click <strong className="text-white">Sign Up with Google</strong>. Once approved by a Super Admin, you will complete remaining profile details upon first login.
-              </p>
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-300 mb-1">Full Name *</label>
-              <input
-                type="text"
-                required
-                placeholder="Mohammed Al-Otaibi"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-300 mb-1">Email Address *</label>
-              <input
-                type="email"
-                required
-                placeholder="m.otaibi@company.sa"
-                value={signupEmail}
-                onChange={(e) => setSignupEmail(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-300 mb-1">Create Password *</label>
-              <input
-                type="password"
-                required
-                placeholder="••••••••"
-                value={signupPassword}
-                onChange={(e) => setSignupPassword(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-medium"
-              />
-            </div>
-
-            <button
-              type="submit"
-              id="btn-submit-signup"
-              className="w-full py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <UserPlus className="w-4 h-4" /> Submit Registration (Pending Approval)
-            </button>
-
-          </form>
-        )}
-
-        {/* Tab: Forgot Password Form */}
-        {activeTab === 'forgotPassword' && (
-          <form onSubmit={handleForgotPasswordSubmit} className="space-y-4 text-xs">
-            <div className="space-y-1">
-              <h3 className="text-sm font-extrabold text-white">Reset Workspace Password</h3>
-              <p className="text-[11px] text-slate-400">
-                Enter your registered workspace email. We will send a secure, time-limited reset link via SMTP.
-              </p>
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-300 mb-1">Registered Email Address</label>
-              <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
-                <input
-                  type="email"
-                  required
-                  placeholder="admin@yourcompany.com"
-                  value={forgotPasswordEmail}
-                  onChange={(e) => setForgotPasswordEmail(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmittingReset}
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer animate-in fade-in"
-            >
-              {isSubmittingReset ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Sending Reset Link...
-                </>
-              ) : (
-                <>
-                  <KeyRound className="w-4 h-4" />
-                  Send Password Reset Link
-                </>
-              )}
-            </button>
-
-            <div className="pt-2 border-t border-slate-800 flex justify-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('adminLogin');
-                  setErrorMessage('');
-                  setSuccessMessage('');
-                }}
-                className="text-[11px] text-slate-400 hover:text-white transition-all font-bold uppercase tracking-wider cursor-pointer"
-              >
-                ← Back to Login
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Tab: Reset Password Form */}
-        {activeTab === 'resetPassword' && (
-          <form onSubmit={handleResetPasswordSubmit} className="space-y-4 text-xs">
-            <div className="space-y-1">
-              <h3 className="text-sm font-extrabold text-white">Choose New Password</h3>
-              <p className="text-[11px] text-slate-400">
-                Specify a new secure password for your workspace account.
-              </p>
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-300 mb-1">New Strong Password</label>
-              <div className="relative">
-                <KeyRound className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-300 mb-1">Confirm New Password</label>
-              <div className="relative">
-                <KeyRound className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={confirmNewPassword}
-                  onChange={(e) => setConfirmNewPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmittingReset}
-              className="w-full py-3 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-800 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-rose-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer animate-in fade-in"
-            >
-              {isSubmittingReset ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Saving Password...
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-4 h-4" />
-                  Save Password & Continue
-                </>
-              )}
-            </button>
-
-            <div className="pt-2 border-t border-slate-800 flex justify-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('adminLogin');
-                  setErrorMessage('');
-                  setSuccessMessage('');
-                  window.history.replaceState({}, document.title, window.location.pathname);
-                }}
-                className="text-[11px] text-slate-400 hover:text-white transition-all font-bold uppercase tracking-wider cursor-pointer"
-              >
-                ← Back to Login
-              </button>
-            </div>
-          </form>
-        )}
-          </>
-        )}
-
-        {/* Footer info */}
-        <div className="text-center text-[11px] text-slate-500 pt-2 border-t border-slate-800">
-          LMS by Umar • Verified Official Portal Access
-        </div>
-      </div>
-
-      {/* Clean Verification Code Input Modal for Master Owner */}
-      {isVerificationModalOpen && (
-        <div 
-          id="modal-master-verification-code"
-          className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
-        >
-          <div className="bg-slate-900 border-2 border-amber-500/80 rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl shadow-amber-500/20 text-slate-100 relative">
-            <button
-              type="button"
-              id="btn-close-verification-modal"
-              onClick={() => setIsVerificationModalOpen(false)}
-              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full hover:bg-slate-800 transition-colors cursor-pointer"
-              title="Close modal"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 shadow-lg shadow-amber-500/20 shrink-0">
-                <Crown className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-black text-white flex items-center gap-1.5">
-                  Master Owner Security Approval
-                </h3>
-                <p className="text-xs text-amber-400 font-semibold flex items-center gap-1 mt-0.5">
-                  <Mail className="w-3.5 h-3.5" /> Brevo Email 2FA Dispatched
-                </p>
-              </div>
-            </div>
-
-            <div className="p-3.5 bg-amber-950/40 border border-amber-500/30 rounded-2xl mb-4 text-xs text-amber-200 leading-relaxed">
-              A confidential 6-digit approval verification code has been dispatched via Brevo Email API to:
-              <div className="mt-1.5 px-3 py-1.5 bg-black/60 rounded-xl font-mono font-black text-amber-300 border border-amber-500/40 text-xs break-all flex items-center justify-between">
-                <span>{masterEmail}</span>
-                <span className="text-[10px] uppercase font-bold text-amber-400/80 px-1.5 py-0.5 bg-amber-500/10 rounded">
-                  Active
-                </span>
-              </div>
-            </div>
-
-            <form onSubmit={handleVerifyMasterOtp} className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-slate-200">
-                    Enter 6-Digit Approval Code
-                  </label>
-                  <span className="text-[11px] text-amber-400 font-mono font-semibold">
-                    Valid for 10 min
+                {/* Quick 1-Click Worker Demo Fill */}
+                <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-2xl space-y-1.5">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                    ⚡ Quick Worker Credentials (Click to fill):
                   </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmailOrSerial('EMP-101');
+                        setPassword('123456');
+                      }}
+                      className="px-2.5 py-1 bg-slate-800 hover:bg-amber-900/60 text-slate-200 border border-slate-700 hover:border-amber-500 rounded-lg text-[10px] font-mono transition-all cursor-pointer"
+                    >
+                      👷 Ahmed Khan (EMP-101)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmailOrSerial('EMP-102');
+                        setPassword('123456');
+                      }}
+                      className="px-2.5 py-1 bg-slate-800 hover:bg-amber-900/60 text-slate-200 border border-slate-700 hover:border-amber-500 rounded-lg text-[10px] font-mono transition-all cursor-pointer"
+                    >
+                      🔨 Bilal Hossain (EMP-102)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmailOrSerial('EMP-103');
+                        setPassword('123456');
+                      }}
+                      className="px-2.5 py-1 bg-slate-800 hover:bg-amber-900/60 text-slate-200 border border-slate-700 hover:border-amber-500 rounded-lg text-[10px] font-mono transition-all cursor-pointer"
+                    >
+                      ⚡ Mohammad Rashid (EMP-103)
+                    </button>
+                  </div>
                 </div>
-                <div className="relative">
-                  <KeyRound className="w-5 h-5 absolute left-3.5 top-3.5 text-amber-400" />
+              </form>
+            )}
+
+            {/* Tab 3: Sign Up / Register */}
+            {activeTab === 'signUp' && (
+              <form onSubmit={handleSignUpSubmit} className="space-y-4 text-xs">
+                <div className="p-3.5 bg-slate-950/80 border border-emerald-500/30 rounded-2xl space-y-1.5">
+                  <span className="text-xs font-black text-emerald-400 uppercase tracking-wider block">
+                    Staff & Worker Account Registration
+                  </span>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Submit your details to join Al-Bawani Contracting workforce. Your profile will be activated immediately upon Super Admin review.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">Full Name *</label>
                   <input
                     type="text"
-                    id="input-verification-code"
-                    autoFocus
                     required
-                    maxLength={32}
-                    placeholder="000000 / Master Password"
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value)}
-                    className="w-full bg-slate-950 border-2 border-amber-500 rounded-2xl pl-11 pr-4 py-3 text-white font-mono text-xl tracking-wider placeholder-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400 text-center font-black"
+                    placeholder="e.g. Mohammed Al-Otaibi"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Enter the 6-digit Brevo OTP, or your Master Password (<code>UmarMaster2026!</code>) for instant access.
-                </p>
-              </div>
 
-              <button
-                type="submit"
-                id="btn-confirm-approval-code"
-                disabled={isVerifyingOtp || !otpCode.trim()}
-                className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs shadow-xl shadow-amber-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {isVerifyingOtp ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                    <span>Verifying Credentials...</span>
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheck className="w-4 h-4 text-slate-950" />
-                    <span>Approve Login & Enter Master Platform</span>
-                  </>
-                )}
-              </button>
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">Email Address *</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="e.g. m.otaibi@albawani.sa"
+                    value={signupEmail}
+                    onChange={(e) => setSignupEmail(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
 
-              <button
-                type="button"
-                id="btn-modal-instant-master-passcode"
-                onClick={() => handleMasterPasswordLogin()}
-                disabled={isVerifyingOtp}
-                className="w-full py-2.5 bg-slate-950 hover:bg-slate-800 text-amber-300 border border-amber-500/50 font-bold rounded-xl text-xs shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                <Crown className="w-3.5 h-3.5 text-amber-400" />
-                <span>⚡ Instant Master Password Override (Bypass OTP Delay)</span>
-              </button>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-300 mb-1">Requested Role *</label>
+                    <select
+                      value={requestedRole}
+                      onChange={(e) => setRequestedRole(e.target.value as UserRole)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-emerald-500 font-bold"
+                    >
+                      <option value="Labor">Labor Worker</option>
+                      <option value="Site Supervisor">Site Supervisor</option>
+                      <option value="HR Admin">HR Admin</option>
+                      <option value="Super Admin">Super Admin</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-300 mb-1">Password *</label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="••••••••"
+                      value={signupPassword}
+                      onChange={(e) => setSignupPassword(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
 
-              <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">Phone Number (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. +966 50 123 4567"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
                 <button
-                  type="button"
-                  id="btn-resend-master-otp"
-                  disabled={otpCountdown > 0 || isSendingOtp}
-                  onClick={() => handleRequestMasterOtp()}
-                  className="text-amber-400 hover:text-amber-300 font-semibold disabled:text-slate-600 cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5"
+                  type="submit"
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isSendingOtp ? 'animate-spin' : ''}`} />
-                  <span>{otpCountdown > 0 ? `Resend in ${otpCountdown}s` : 'Resend Code via Brevo'}</span>
+                  <UserPlus className="w-4 h-4" /> Submit Registration Request
+                </button>
+              </form>
+            )}
+
+            {/* Forgot Password Screen */}
+            {activeTab === 'forgotPassword' && (
+              <form onSubmit={handleForgotPasswordSubmit} className="space-y-4 text-xs">
+                <div className="text-center space-y-1">
+                  <h3 className="text-base font-extrabold text-white">Reset Account Password</h3>
+                  <p className="text-xs text-slate-400">
+                    Enter your registered email address and we will dispatch a secure reset link.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">Registered Email Address</label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                    <input
+                      type="email"
+                      required
+                      placeholder="e.g. admin@lms.com"
+                      value={forgotPasswordEmail}
+                      onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmittingReset}
+                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <KeyRound className="w-4 h-4" /> {isSubmittingReset ? 'Dispatching Reset Link...' : 'Send Password Reset Email'}
                 </button>
 
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('adminLogin');
+                      setErrorMessage('');
+                      setSuccessMessage('');
+                    }}
+                    className="text-xs text-slate-400 hover:text-white font-bold cursor-pointer"
+                  >
+                    ← Return to Login
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Reset Password Screen */}
+            {activeTab === 'resetPassword' && (
+              <form onSubmit={handleResetPasswordSubmit} className="space-y-4 text-xs">
+                <div className="text-center space-y-1">
+                  <h3 className="text-base font-extrabold text-white">Set New Password</h3>
+                  <p className="text-xs text-slate-400">
+                    Choose a strong password to secure your account.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">New Password</label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">Confirm New Password</label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
                 <button
-                  type="button"
-                  id="btn-change-credentials"
-                  onClick={() => setIsVerificationModalOpen(false)}
-                  className="text-slate-400 hover:text-slate-200 font-medium cursor-pointer"
+                  type="submit"
+                  disabled={isSubmittingReset}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
-                  Change Email / Password
+                  <Lock className="w-4 h-4" /> {isSubmittingReset ? 'Updating Password...' : 'Update Password & Sign In'}
                 </button>
-              </div>
+              </form>
+            )}
+          </>
+        )}
+      </div>
 
-              <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400 text-center">
-                <span className="text-slate-500">Emergency Master Bypass PIN: </span>
-                <code 
-                  onClick={() => setOtpCode('123456')} 
-                  className="text-amber-400 font-mono font-bold cursor-pointer hover:underline px-1 py-0.5 bg-amber-500/10 rounded border border-amber-500/30"
-                  title="Click to auto-fill bypass PIN"
-                >
-                  123456
-                </code>
-                <span className="text-slate-500"> or Master Password</span>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
+      {/* Footer Branding */}
+      <footer className="mt-6 text-center text-xs text-slate-500">
+        <p>© {new Date().getFullYear()} LMS by Umar • Dedicated Single-Tenant Workforce Platform</p>
+      </footer>
     </div>
   );
 };
-

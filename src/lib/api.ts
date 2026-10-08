@@ -358,6 +358,7 @@ export async function googleAuthApi(data: {
   success?: boolean;
   isNewUser?: boolean;
   userNeededDetails?: boolean;
+  requireProfileCompletion?: boolean;
   user?: User;
   status?: string;
   error?: string;

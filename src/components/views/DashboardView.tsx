@@ -3,6 +3,7 @@ import { User, Site, Attendance, Payroll, Complaint, Notice } from '../../types'
 import { getIqamaExpiryStatus } from '../../utils/iqamaUtils';
 import { useI18n } from '../../lib/i18n';
 import { UserAvatar } from '../UserAvatar';
+import { WeeklyAttendancePayrollWidget } from '../WeeklyAttendancePayrollWidget';
 import { 
   Building2, 
   Users, 
@@ -341,6 +342,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="text-[11px] text-slate-500">Current month payout</span>
           </div>
         </div>
+      )}
+
+      {/* RECHARTS WEEKLY ATTENDANCE & PAYROLL EXPENDITURE ANALYTICS WIDGET */}
+      {currentUser.role !== 'Labor' && (
+        <WeeklyAttendancePayrollWidget
+          attendance={attendance}
+          payrolls={payrolls}
+          onNavigateToAttendance={() => setActiveTab('attendance')}
+          onNavigateToPayroll={() => setActiveTab('payroll')}
+        />
       )}
 
       {/* IQAMA EXPIRY ALERTS WARNING PANEL (Requirement: Live 30-day & 60-day renewal tracker) */}

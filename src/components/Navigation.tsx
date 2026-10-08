@@ -13,8 +13,7 @@ import {
   Server,
   Settings,
   FolderLock,
-  UserCheck,
-  Crown
+  UserCheck
 } from 'lucide-react';
 
 interface NavigationProps {
@@ -38,10 +37,24 @@ export const Navigation: React.FC<NavigationProps> = ({
   const t = (key: string, fallback?: string) => getTranslation(lang, key, fallback);
 
   const allTabs = [
-    { id: 'dashboard', label: userRole === 'Labor' ? t('workerPortal', 'My Worker Portal') : t('dashboard', 'Dashboard'), icon: LayoutDashboard, roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor', 'Labor'] },
-    { id: 'saas_owner', label: t('saas_owner', 'SaaS Tenants & Billing'), icon: Crown, roles: ['Owner'] },
-    { id: 'attendance', label: userRole === 'Labor' ? t('myAttendance', 'My Attendance') : t('attendance', 'Attendance'), icon: CalendarCheck, roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor', 'Labor'] },
-    { id: 'payroll', label: userRole === 'Labor' ? t('myPayroll', 'My Payslips') : t('payroll', 'Payroll'), icon: DollarSign, roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor'] },
+    { 
+      id: 'dashboard', 
+      label: userRole === 'Labor' ? t('workerPortal', 'My Worker Portal') : t('dashboard', 'Dashboard'), 
+      icon: LayoutDashboard, 
+      roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor', 'Labor'] 
+    },
+    { 
+      id: 'attendance', 
+      label: userRole === 'Labor' ? t('myAttendance', 'My Attendance') : t('attendance', 'Attendance'), 
+      icon: CalendarCheck, 
+      roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor', 'Labor'] 
+    },
+    { 
+      id: 'payroll', 
+      label: userRole === 'Labor' ? t('myPayroll', 'My Payslips') : t('payroll', 'Payroll'), 
+      icon: DollarSign, 
+      roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor'] 
+    },
     { 
       id: 'complaints', 
       label: userRole === 'Labor' ? t('submitFeedback', 'Submit Feedback') : t('complaints', 'Complaints'), 
@@ -49,10 +62,30 @@ export const Navigation: React.FC<NavigationProps> = ({
       badge: unresolvedCount > 0 && userRole !== 'Labor' ? unresolvedCount : undefined,
       roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor', 'Labor']
     },
-    { id: 'notices', label: t('notices', 'Notices'), icon: Megaphone, roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor', 'Labor'] },
-    { id: 'documents', label: t('documents', 'Document Vault'), icon: FolderLock, roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor'] },
-    { id: 'sites', label: t('sites', 'Sites'), icon: Building2, roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor'] },
-    { id: 'users', label: t('users', 'Staff & Role Invites'), icon: Users, roles: ['Owner', 'Super Admin', 'HR Admin'] },
+    { 
+      id: 'notices', 
+      label: t('notices', 'Notices'), 
+      icon: Megaphone, 
+      roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor', 'Labor'] 
+    },
+    { 
+      id: 'documents', 
+      label: t('documents', 'Document Vault'), 
+      icon: FolderLock, 
+      roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor'] 
+    },
+    { 
+      id: 'sites', 
+      label: t('sites', 'Sites & Projects'), 
+      icon: Building2, 
+      roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor'] 
+    },
+    { 
+      id: 'users', 
+      label: t('users', 'Staff & Workforce'), 
+      icon: Users, 
+      roles: ['Owner', 'Super Admin', 'HR Admin'] 
+    },
     { 
       id: 'login_requests', 
       label: t('login_requests', 'Pending Approvals'), 
@@ -60,10 +93,18 @@ export const Navigation: React.FC<NavigationProps> = ({
       badge: pendingLoginCount > 0 ? pendingLoginCount : undefined,
       roles: ['Owner', 'Super Admin', 'HR Admin'] 
     },
-    { id: 'settings', label: t('settings', 'RBAC & Policies'), icon: Settings, roles: ['Owner', 'Super Admin', 'HR Admin'] },
-    { id: 'security', label: t('security', 'Security Options'), icon: FolderLock, roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor', 'Labor'] },
-    { id: 'express_backend', label: t('express_backend', 'Express Node API'), icon: Server, roles: ['Owner'] },
-    { id: 'sql_workbench', label: t('sql_workbench', 'SQL DB Schema'), icon: Database, roles: ['Owner'] }
+    { 
+      id: 'settings', 
+      label: t('settings', 'Company & Policies'), 
+      icon: Settings, 
+      roles: ['Owner', 'Super Admin', 'HR Admin'] 
+    },
+    { 
+      id: 'security', 
+      label: t('security', 'Security Settings'), 
+      icon: FolderLock, 
+      roles: ['Owner', 'Super Admin', 'HR Admin', 'Site Supervisor', 'Labor'] 
+    }
   ];
 
   const visibleTabs = allTabs.filter(tab => tab.roles.includes(userRole));

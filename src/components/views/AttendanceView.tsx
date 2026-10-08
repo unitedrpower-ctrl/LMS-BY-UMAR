@@ -23,7 +23,10 @@ import {
   Coins,
   ChevronLeft,
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  Palmtree,
+  Stethoscope,
+  RotateCcw
 } from 'lucide-react';
 import { bulkUpdateAttendanceApi } from '../../lib/api';
 
@@ -106,24 +109,24 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   });
 
   // Get existing records for this site + date
-  const getExistingStatus = (userId: string): AttendanceStatus => {
-    const existing = attendanceList.find(
+  const getExistingRecord = (userId: string): Attendance | undefined => {
+    return attendanceList.find(
       (a) => a.userId === userId && a.date === selectedDate && a.siteId === selectedSiteId
     );
-    return existing ? existing.status : 'Present';
+  };
+
+  const getExistingStatus = (userId: string): AttendanceStatus | undefined => {
+    const existing = getExistingRecord(userId);
+    return existing ? existing.status : undefined;
   };
 
   const getExistingNotes = (userId: string): string => {
-    const existing = attendanceList.find(
-      (a) => a.userId === userId && a.date === selectedDate && a.siteId === selectedSiteId
-    );
+    const existing = getExistingRecord(userId);
     return existing?.notes || '';
   };
 
   const getExistingOvertime = (userId: string): number => {
-    const existing = attendanceList.find(
-      (a) => a.userId === userId && a.date === selectedDate && a.siteId === selectedSiteId
-    );
+    const existing = getExistingRecord(userId);
     return existing?.overtimeHours || 0;
   };
 
@@ -136,12 +139,12 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     }
   }, [selectedDate]);
 
-  const [draftAttendance, setDraftAttendance] = useState<Record<string, { status: AttendanceStatus; notes: string; overtimeHours: number }>>({});
+  const [draftAttendance, setDraftAttendance] = useState<Record<string, { status: AttendanceStatus | undefined; notes: string; overtimeHours: number }>>({});
   const [saveSuccessMsg, setSaveSuccessMsg] = useState(false);
 
   // Initialize draft when site/date/sponsor changes
   React.useEffect(() => {
-    const initialDraft: Record<string, { status: AttendanceStatus; notes: string; overtimeHours: number }> = {};
+    const initialDraft: Record<string, { status: AttendanceStatus | undefined; notes: string; overtimeHours: number }> = {};
     siteLaborers.forEach((lab) => {
       initialDraft[lab.id] = {
         status: getExistingStatus(lab.id),
@@ -168,7 +171,33 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
     }
   };
 
-  const handleStatusToggle = (userId: string, newStatus: AttendanceStatus) => {
+  // Exact Requested Attendance Status Cycle:
+  // P (Present) -> HD (Holiday) -> A (Absent) -> L / Sick (Leave) -> Clear / Empty (undefined) -> P
+  const getNextStatusInCycle = (current: AttendanceStatus | undefined): AttendanceStatus | undefined => {
+    if (!current) return 'Present';
+    if (current === 'Present') return 'Holiday';
+    if (current === 'Holiday') return 'Absent';
+    if (current === 'Absent') return 'Leave';
+    if (current === 'Leave' || (current as string) === 'Half-Day') return undefined; // Reset to blank/none
+    return 'Present';
+  };
+
+  const handleStatusCycle = (userId: string) => {
+    setDraftAttendance((prev) => {
+      const cur = prev[userId]?.status;
+      const next = getNextStatusInCycle(cur);
+      return {
+        ...prev,
+        [userId]: {
+          status: next,
+          notes: prev[userId]?.notes || '',
+          overtimeHours: prev[userId]?.overtimeHours || 0
+        }
+      };
+    });
+  };
+
+  const handleStatusToggle = (userId: string, newStatus: AttendanceStatus | undefined) => {
     setDraftAttendance((prev) => ({
       ...prev,
       [userId]: {
@@ -225,19 +254,21 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
       if (viewMode === 'daily') {
         recordsToSave = siteLaborers.map((lab) => {
-          const draft = draftAttendance[lab.id] || { status: 'Present', notes: '', overtimeHours: 0 };
+          const draft = draftAttendance[lab.id];
+          const currentStatus = draft?.status;
           return {
             id: `att-${lab.id}-${selectedDate}`,
             userId: lab.id,
             siteId: selectedSiteId,
             date: selectedDate,
-            status: draft.status,
+            status: (currentStatus || 'None') as AttendanceStatus,
             markedBy: currentUser.id,
-            notes: draft.notes,
-            overtimeHours: draft.overtimeHours,
+            notes: draft?.notes || '',
+            overtimeHours: draft?.overtimeHours || 0,
             isFridayOvertime: isSelectedDateFriday,
-            companyId: currentUser.companyId || 'comp-001'
-          };
+            companyId: currentUser.companyId || 'comp-001',
+            _delete: !currentStatus
+          } as any;
         });
       } else {
         const dirtyList = Object.values(dirtyAttendance) as Attendance[];
@@ -452,8 +483,9 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
             .td-worker { text-align: left; padding-left: 6px; font-weight: bold; }
             .is-friday { background: #e0f2fe !important; font-weight: bold; }
             .st-p { color: #15803d; font-weight: bold; }
-            .st-hd { color: #b45309; font-weight: bold; }
+            .st-hd { color: #1d4ed8; font-weight: bold; }
             .st-a { color: #b91c1c; font-weight: bold; }
+            .st-l { color: #b45309; font-weight: bold; }
             .st-none { color: #cbd5e1; }
             .signatures { display: flex; justify-content: space-between; margin-top: 30px; padding-top: 15px; border-top: 1px solid #cbd5e1; font-size: 10px; }
             @media print {
@@ -490,10 +522,11 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                   const fri = isFridayDay(d);
                   return `<th class="${fri ? 'is-friday' : ''}">${d}<br/><span style="font-weight:normal; font-size:7px;">${getDayInitial(d)}</span></th>`;
                 }).join('')}
-                <th style="background:#065f46; width: 25px;">P</th>
-                <th style="background:#92400e; width: 25px;">HD</th>
-                <th style="background:#991b1b; width: 25px;">A</th>
-                <th style="background:#3730a3; width: 35px;">OT</th>
+                <th style="background:#065f46; width: 22px;">P</th>
+                <th style="background:#1d4ed8; width: 22px;">HD</th>
+                <th style="background:#991b1b; width: 22px;">A</th>
+                <th style="background:#b45309; width: 22px;">L</th>
+                <th style="background:#3730a3; width: 28px;">OT</th>
               </tr>
             </thead>
             <tbody>
@@ -501,6 +534,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 let pCnt = 0;
                 let hdCnt = 0;
                 let aCnt = 0;
+                let lCnt = 0;
                 let otSum = 0;
 
                 const dayCells = daysArray.map(d => {
@@ -510,16 +544,20 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
                   if (rec) {
                     if (rec.status === 'Present') { pCnt++; }
-                    else if (rec.status === 'Half-Day') { hdCnt++; }
+                    else if (rec.status === 'Holiday') { hdCnt++; }
                     else if (rec.status === 'Absent') { aCnt++; }
+                    else if (rec.status === 'Leave') { lCnt++; }
+                    else if (rec.status === 'Half-Day') { pCnt += 0.5; }
                     if (rec.overtimeHours) { otSum += rec.overtimeHours; }
                   }
 
                   let badge = '-';
                   let cls = 'st-none';
                   if (rec?.status === 'Present') { badge = 'P'; cls = 'st-p'; }
-                  else if (rec?.status === 'Half-Day') { badge = 'HD'; cls = 'st-hd'; }
+                  else if (rec?.status === 'Holiday') { badge = 'HD'; cls = 'st-hd'; }
                   else if (rec?.status === 'Absent') { badge = 'A'; cls = 'st-a'; }
+                  else if (rec?.status === 'Leave') { badge = 'L'; cls = 'st-l'; }
+                  else if (rec?.status === 'Half-Day') { badge = 'HD'; cls = 'st-hd'; }
 
                   return `<td class="${fri ? 'is-friday ' : ''}${cls}">${badge}</td>`;
                 }).join('');
@@ -531,8 +569,9 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                     <td style="font-size:8px;">${lab.sponsorName || 'Direct'}</td>
                     ${dayCells}
                     <td style="font-weight:bold; background:#ecfdf5; color:#047857;">${pCnt}</td>
-                    <td style="font-weight:bold; background:#fffbeb; color:#b45309;">${hdCnt}</td>
+                    <td style="font-weight:bold; background:#eff6ff; color:#1d4ed8;">${hdCnt}</td>
                     <td style="font-weight:bold; background:#fef2f2; color:#b91c1c;">${aCnt}</td>
+                    <td style="font-weight:bold; background:#fffbeb; color:#b45309;">${lCnt}</td>
                     <td style="font-weight:bold; background:#e0e7ff; color:#3730a3;">${otSum ? '+' + otSum : '0'}</td>
                   </tr>
                 `;
@@ -1193,7 +1232,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                 Full 1-31 Monthly Attendance Matrix Grid ({selectedMonth})
               </h3>
               <p className="text-[11px] text-slate-400">
-                Click any status cell to cycle (P → HD → A → -) and immediately update work logs.
+                Click any status cell to cycle: <strong>P</strong> (Present) → <strong>HD</strong> (Holiday) → <strong>A</strong> (Absent) → <strong>L</strong> (Leave/Sick) → <strong>-</strong> (Reset to Blank).
               </p>
             </div>
 
@@ -1235,16 +1274,17 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                       </th>
                     );
                   })}
-                  <th className="p-2 bg-emerald-100 text-emerald-900 border border-slate-200 w-10">P</th>
-                  <th className="p-2 bg-amber-100 text-amber-900 border border-slate-200 w-10">HD</th>
-                  <th className="p-2 bg-rose-100 text-rose-900 border border-slate-200 w-10">A</th>
-                  <th className="p-2 bg-indigo-100 text-indigo-900 border border-slate-200 w-12">OT</th>
+                  <th className="p-2 bg-emerald-100 text-emerald-900 border border-slate-200 w-9" title="Present (1.0)">P</th>
+                  <th className="p-2 bg-blue-100 text-blue-900 border border-slate-200 w-9" title="Holiday (1.0)">HD</th>
+                  <th className="p-2 bg-rose-100 text-rose-900 border border-slate-200 w-9" title="Absent (0.0)">A</th>
+                  <th className="p-2 bg-amber-100 text-amber-900 border border-slate-200 w-9" title="Leave / Sick Leave (1.0)">L</th>
+                  <th className="p-2 bg-indigo-100 text-indigo-900 border border-slate-200 w-11" title="Overtime Hours">OT</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-[11px]">
                 {siteLaborers.length === 0 ? (
                   <tr>
-                    <td colSpan={daysArray.length + 8} className="p-8 text-center text-slate-400">
+                    <td colSpan={daysArray.length + 9} className="p-8 text-center text-slate-400">
                       No workers found matching selected site & sponsor filter.
                     </td>
                   </tr>
@@ -1253,6 +1293,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                     let pTotal = 0;
                     let hdTotal = 0;
                     let aTotal = 0;
+                    let lTotal = 0;
                     let otTotal = 0;
                     const isChecked = selectedWorkerIds.includes(lab.id);
 
@@ -1263,29 +1304,40 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
                       if (rec) {
                         if (rec.status === 'Present') pTotal++;
-                        else if (rec.status === 'Half-Day') hdTotal++;
+                        else if (rec.status === 'Holiday') hdTotal++;
                         else if (rec.status === 'Absent') aTotal++;
+                        else if (rec.status === 'Leave') lTotal++;
+                        else if (rec.status === 'Half-Day') {
+                          // backward compatibility
+                          pTotal += 0.5;
+                        }
                         if (rec.overtimeHours) otTotal += rec.overtimeHours;
                       }
 
                       const handleCellClick = () => {
                         if (currentUser.role === 'Labor') return; // Read-only for labor
-                        let nextStatus: AttendanceStatus = 'Present';
-                        if (!rec || rec.status === 'Present') nextStatus = 'Half-Day';
-                        else if (rec.status === 'Half-Day') nextStatus = 'Absent';
-                        else if (rec.status === 'Absent') nextStatus = 'Present';
+                        
+                        // Exact Cycle Order:
+                        // P (Present) -> HD (Holiday) -> A (Absent) -> L / Sick (Leave) -> Empty / Clear -> restarts to P
+                        let nextStatus: AttendanceStatus | undefined = undefined;
+                        if (!rec || !rec.status) nextStatus = 'Present';
+                        else if (rec.status === 'Present') nextStatus = 'Holiday';
+                        else if (rec.status === 'Holiday') nextStatus = 'Absent';
+                        else if (rec.status === 'Absent') nextStatus = 'Leave';
+                        else if (rec.status === 'Leave' || (rec.status as string) === 'Half-Day') nextStatus = undefined; // Clear back to blank
 
                         const updatedRec: Attendance = {
                           id: rec?.id || `att-${lab.id}-${dStr}`,
                           userId: lab.id,
                           siteId: selectedSiteId,
                           date: dStr,
-                          status: nextStatus,
+                          status: (nextStatus || 'None') as AttendanceStatus,
                           markedBy: currentUser.id,
                           notes: rec?.notes || '',
                           overtimeHours: rec?.overtimeHours || 0,
-                          companyId: currentUser.companyId || 'comp-001'
-                        };
+                          companyId: currentUser.companyId || 'comp-001',
+                          ...(!nextStatus ? { _delete: true } : {})
+                        } as any;
 
                         setDirtyAttendance((prev) => ({
                           ...prev,
@@ -1299,25 +1351,33 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                         <td
                           key={d}
                           onClick={handleCellClick}
-                          title={`${lab.name} - ${dStr}: ${rec?.status || 'Unmarked'}. Click to cycle.`}
-                          className={`p-1 border border-slate-200 cursor-pointer select-none transition-colors ${
+                          title={`${lab.name} - ${dStr}: ${rec?.status || 'Unmarked'}. Click to cycle: P → HD → A → L → Clear.`}
+                          className={`p-0.5 border border-slate-200 cursor-pointer select-none transition-colors hover:ring-1 hover:ring-indigo-400 ${
                             fri ? 'bg-indigo-50/50' : ''
                           }`}
                         >
                           {rec?.status === 'Present' ? (
-                            <span className="px-1 py-0.5 rounded bg-emerald-500 text-white font-black text-[9px] block">
+                            <span className="px-1 py-0.5 rounded bg-emerald-600 text-white font-black text-[9px] block shadow-xs" title="Present (P)">
                               P
                             </span>
-                          ) : rec?.status === 'Half-Day' ? (
-                            <span className="px-1 py-0.5 rounded bg-amber-500 text-white font-black text-[9px] block">
+                          ) : rec?.status === 'Holiday' ? (
+                            <span className="px-1 py-0.5 rounded bg-blue-600 text-white font-black text-[9px] block shadow-xs" title="Holiday (HD)">
                               HD
                             </span>
                           ) : rec?.status === 'Absent' ? (
-                            <span className="px-1 py-0.5 rounded bg-rose-600 text-white font-black text-[9px] block">
+                            <span className="px-1 py-0.5 rounded bg-rose-600 text-white font-black text-[9px] block shadow-xs" title="Absent (A)">
                               A
                             </span>
+                          ) : rec?.status === 'Leave' ? (
+                            <span className="px-1 py-0.5 rounded bg-amber-500 text-slate-950 font-black text-[9px] block shadow-xs" title="Leave / Sick (L)">
+                              L
+                            </span>
+                          ) : rec?.status === 'Half-Day' ? (
+                            <span className="px-1 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-[9px] block shadow-xs" title="Half-Day (HD)">
+                              HD
+                            </span>
                           ) : (
-                            <span className="text-slate-300 font-mono text-[9px] block">-</span>
+                            <span className="text-slate-300 font-mono text-[9px] block py-0.5">-</span>
                           )}
                         </td>
                       );
@@ -1344,8 +1404,9 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                         </td>
                         {dayCells}
                         <td className="p-2 font-black text-emerald-700 bg-emerald-50 border border-slate-200">{pTotal}</td>
-                        <td className="p-2 font-black text-amber-700 bg-amber-50 border border-slate-200">{hdTotal}</td>
+                        <td className="p-2 font-black text-blue-700 bg-blue-50 border border-slate-200">{hdTotal}</td>
                         <td className="p-2 font-black text-rose-700 bg-rose-50 border border-slate-200">{aTotal}</td>
+                        <td className="p-2 font-black text-amber-700 bg-amber-50 border border-slate-200">{lTotal}</td>
                         <td className="p-2 font-black text-indigo-700 bg-indigo-50 border border-slate-200">
                           {otTotal ? `+${otTotal}` : '0'}
                         </td>
@@ -1473,41 +1534,116 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
 
                     {/* Status Toggle Buttons & Overtime Input */}
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                      <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+                      {/* Main Interactive Cycle Button: P -> HD -> A -> L -> Clear */}
+                      <button
+                        type="button"
+                        onClick={() => handleStatusCycle(lab.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs border ${
+                          currentStatus === 'Present'
+                            ? 'bg-emerald-600 text-white border-emerald-700'
+                            : currentStatus === 'Holiday'
+                            ? 'bg-blue-600 text-white border-blue-700'
+                            : currentStatus === 'Absent'
+                            ? 'bg-rose-600 text-white border-rose-700'
+                            : currentStatus === 'Leave'
+                            ? 'bg-amber-500 text-slate-950 border-amber-600'
+                            : 'bg-white text-slate-500 border-dashed border-slate-300 hover:border-slate-400 hover:text-slate-800'
+                        }`}
+                        title="Click to cycle: Present (P) → Holiday (HD) → Absent (A) → Leave (L) → Clear"
+                      >
+                        {currentStatus === 'Present' ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>P (Present - 1.0)</span>
+                          </>
+                        ) : currentStatus === 'Holiday' ? (
+                          <>
+                            <Palmtree className="w-3.5 h-3.5" />
+                            <span>HD (Holiday - 1.0)</span>
+                          </>
+                        ) : currentStatus === 'Absent' ? (
+                          <>
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>A (Absent - 0.0)</span>
+                          </>
+                        ) : currentStatus === 'Leave' ? (
+                          <>
+                            <Stethoscope className="w-3.5 h-3.5" />
+                            <span>L (Leave / Sick - 1.0)</span>
+                          </>
+                        ) : (
+                          <>
+                            <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+                            <span className="text-slate-400 italic">Unmarked (Click to Cycle)</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* Direct Status Selector Segmented Pills */}
+                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
                         <button
                           type="button"
                           onClick={() => handleStatusToggle(lab.id, 'Present')}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                          className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
                             currentStatus === 'Present'
                               ? 'bg-emerald-600 text-white shadow-xs'
                               : 'text-slate-600 hover:text-slate-900'
                           }`}
+                          title="Set Present (1.0 wage)"
                         >
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Present (1.0)
+                          <CheckCircle2 className="w-3 h-3" /> P
                         </button>
 
                         <button
                           type="button"
-                          onClick={() => handleStatusToggle(lab.id, 'Half-Day')}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
-                            currentStatus === 'Half-Day'
-                              ? 'bg-amber-500 text-white shadow-xs'
+                          onClick={() => handleStatusToggle(lab.id, 'Holiday')}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                            currentStatus === 'Holiday'
+                              ? 'bg-blue-600 text-white shadow-xs'
                               : 'text-slate-600 hover:text-slate-900'
                           }`}
+                          title="Set Holiday (1.0 paid)"
                         >
-                          <Clock className="w-3.5 h-3.5" /> Half-Day (0.5)
+                          <Palmtree className="w-3 h-3" /> HD
                         </button>
 
                         <button
                           type="button"
                           onClick={() => handleStatusToggle(lab.id, 'Absent')}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                          className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
                             currentStatus === 'Absent'
-                              ? 'bg-red-600 text-white shadow-xs'
+                              ? 'bg-rose-600 text-white shadow-xs'
                               : 'text-slate-600 hover:text-slate-900'
                           }`}
+                          title="Set Absent (0.0 wage)"
                         >
-                          <XCircle className="w-3.5 h-3.5" /> Absent (0.0)
+                          <XCircle className="w-3 h-3" /> A
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleStatusToggle(lab.id, 'Leave')}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                            currentStatus === 'Leave'
+                              ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                          title="Set Leave / Sick Leave (Paid)"
+                        >
+                          <Stethoscope className="w-3 h-3" /> L
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleStatusToggle(lab.id, undefined)}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                            !currentStatus
+                              ? 'bg-slate-700 text-white shadow-xs'
+                              : 'text-slate-400 hover:text-slate-700'
+                          }`}
+                          title="Clear / Reset to blank"
+                        >
+                          <RotateCcw className="w-3 h-3" /> Reset
                         </button>
                       </div>
 

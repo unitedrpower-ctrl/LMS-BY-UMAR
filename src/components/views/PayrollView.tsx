@@ -131,8 +131,11 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
       const presentDays = userAtt.filter((a) => a.status === 'Present').length;
       const halfDays = userAtt.filter((a) => a.status === 'Half-Day').length;
       const absentDays = userAtt.filter((a) => a.status === 'Absent').length;
+      const leaveDays = userAtt.filter((a) => a.status === 'Leave').length;
+      const holidayDays = userAtt.filter((a) => a.status === 'Holiday').length;
 
-      const totalWorked = presentDays + halfDays * 0.5;
+      // Effective worked days: full day + 0.5 half day + paid leave/sick leave + holiday
+      const totalWorked = presentDays + halfDays * 0.5 + leaveDays + holidayDays;
 
       // Calculate Overtime Hours from attendance
       const otHours = userAtt.reduce((sum, a) => sum + (a.overtimeHours || 0), 0);
@@ -169,6 +172,8 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
         presentDays,
         halfDays,
         absentDays,
+        leaveDays,
+        holidayDays,
         fridayHolidayDays,
         fridayPay,
         govHolidayDays,
