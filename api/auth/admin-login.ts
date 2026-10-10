@@ -90,7 +90,14 @@ export default async function handler(req: any, res: any) {
     return res.status(404).json({ error: `Account "${inputIdentifier}" was not found. Please verify credentials.` });
   }
 
-  if (matched.loginPassword !== inputPassword && inputPassword !== 'admin123' && inputPassword !== 'hr123' && inputPassword !== 'sup123' && inputPassword !== 'UmarMaster2026!') {
+  const validPasswords = [
+    matched.loginPassword,
+    process.env.ADMIN_FALLBACK_PASSWORD,
+    process.env.MASTER_PASSWORD,
+    process.env.OWNER_PASSCODE
+  ].filter(Boolean) as string[];
+
+  if (!validPasswords.some(p => p.trim() === inputPassword)) {
     return res.status(401).json({ error: 'Invalid Password. Please check credentials.' });
   }
 

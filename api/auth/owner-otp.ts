@@ -28,8 +28,11 @@ export default async function handler(req: any, res: any) {
     return res.status(403).json({ error: 'Platform Master Owner login is strictly restricted to authorized Master Owner accounts.' });
   }
 
-  const validMasterPasswords = ['UmarMaster2026!', 'MasterOwner#2026', 'admin123'];
-  if (password && !validMasterPasswords.includes(password.trim())) {
+  const validMasterPasswords = [
+    process.env.MASTER_PASSWORD,
+    process.env.OWNER_PASSCODE
+  ].filter(Boolean) as string[];
+  if (password && validMasterPasswords.length > 0 && !validMasterPasswords.some(p => p.trim() === password.trim())) {
     return res.status(400).json({ error: 'Invalid Master Owner password.' });
   }
 

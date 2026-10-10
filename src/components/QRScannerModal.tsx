@@ -53,6 +53,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const [autoMarkPresent, setAutoMarkPresent] = useState<boolean>(false);
   const [hasTorch, setHasTorch] = useState<boolean>(false);
   const [torchOn, setTorchOn] = useState<boolean>(false);
+  const [scanDirection, setScanDirection] = useState<'IN' | 'OUT'>('IN');
 
   // Scanned Worker Details State
   const [scannedWorker, setScannedWorker] = useState<User | null>(null);
@@ -322,29 +323,51 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       (a) => a.userId === worker.id && a.date === todayStr
     );
 
-    const record: Attendance = {
-      id: existingRec?.id || `att-${worker.id}-${todayStr}`,
-      companyId: currentUser.companyId || worker.companyId,
-      userId: worker.id,
-      siteId: selectedSiteId || worker.siteId || sites[0]?.id || 'site-central',
-      date: todayStr,
-      status: status,
-      markedBy: currentUser.id,
-      checkInTime: nowTime,
-      overtimeHours: ot,
-      isFridayOvertime: new Date().getDay() === 5 && ot > 0,
-      notes: notes || `QR Check-In at ${nowTime} by ${currentUser.name}`
-    };
+    let record: Attendance;
+    if (scanDirection === 'IN') {
+      record = {
+        id: existingRec?.id || `att-${worker.id}-${todayStr}`,
+        companyId: currentUser.companyId || worker.companyId,
+        userId: worker.id,
+        siteId: selectedSiteId || worker.siteId || sites[0]?.id || 'site-central',
+        date: todayStr,
+        status: status,
+        markedBy: currentUser.id,
+        checkInTime: existingRec?.checkInTime || nowTime,
+        overtimeHours: ot,
+        isFridayOvertime: new Date().getDay() === 5 && ot > 0,
+        notes: notes || `QR Check-In at ${nowTime} by ${currentUser.name}`
+      };
+    } else {
+      record = {
+        id: existingRec?.id || `att-${worker.id}-${todayStr}`,
+        companyId: currentUser.companyId || worker.companyId,
+        userId: worker.id,
+        siteId: selectedSiteId || worker.siteId || sites[0]?.id || 'site-central',
+        date: todayStr,
+        status: existingRec?.status || 'Present',
+        markedBy: currentUser.id,
+        checkInTime: existingRec?.checkInTime || '08:00 AM',
+        checkOutTime: nowTime,
+        overtimeHours: ot || existingRec?.overtimeHours || 0,
+        isFridayOvertime: new Date().getDay() === 5,
+        notes: notes || `QR Check-Out at ${nowTime} by ${currentUser.name}`
+      };
+    }
 
     try {
       await onMarkAttendance([record]);
       setMarkingSuccess(
-        `✓ ${worker.name} successfully marked "${status}" at ${nowTime}!`
+        scanDirection === 'IN'
+          ? `✓ ${worker.name} successfully checked IN at ${nowTime}!`
+          : `✓ ${worker.name} successfully checked OUT at ${nowTime}!`
       );
     } catch (err: any) {
       console.warn('Attendance save warning:', err);
       setMarkingSuccess(
-        `✓ ${worker.name} marked "${status}" locally!`
+        scanDirection === 'IN'
+          ? `✓ ${worker.name} checked IN locally!`
+          : `✓ ${worker.name} checked OUT locally!`
       );
     } finally {
       setIsSaving(false);
@@ -417,6 +440,35 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
         {/* Modal Content */}
         <div className="p-5 sm:p-6 space-y-5">
+          {/* Scan Direction Toggle Bar: IN vs OUT */}
+          <div className="grid grid-cols-2 gap-2 bg-slate-950 p-1.5 rounded-2xl border border-slate-800">
+            <button
+              type="button"
+              onClick={() => setScanDirection('IN')}
+              className={`py-2.5 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                scanDirection === 'IN'
+                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+              <span>🟢 CHECK-IN (IN)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setScanDirection('OUT')}
+              className={`py-2.5 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                scanDirection === 'OUT'
+                  ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/30'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              <Clock className="w-4 h-4 text-amber-200" />
+              <span>🟠 CHECK-OUT (OUT)</span>
+            </button>
+          </div>
+
           {/* CAMERA VIEWFINDER (when no worker is selected or continuous scan) */}
           {!scannedWorker && (
             <div className="space-y-3">

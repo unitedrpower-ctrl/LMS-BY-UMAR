@@ -2090,15 +2090,53 @@ Platform Administration • LMS by Umar`;
 
     const targetCompany = companies.find(c => c.id === targetCompanyId) || companies[0];
 
+    const tempPassword = `TempPass#${Math.floor(1000 + Math.random() * 9000)}`;
+    const hashedPassword = hashPassword(tempPassword);
+
+    // Upsert or create user record with mustChangePassword: true
+    let invitedUser = users.find(u => u.email.toLowerCase() === normalizedEmail);
+    if (invitedUser) {
+      invitedUser.role = role;
+      invitedUser.companyId = targetCompanyId || targetCompany?.id || 'comp-001';
+      invitedUser.loginPassword = hashedPassword;
+      invitedUser.mustChangePassword = true;
+      invitedUser.status = 'Pending';
+    } else {
+      invitedUser = {
+        id: `usr-inv-${Date.now()}`,
+        companyId: targetCompanyId || targetCompany?.id || 'comp-001',
+        name: normalizedEmail.split('@')[0],
+        email: normalizedEmail,
+        role,
+        dailyRate: role === 'Owner' ? 350.0 : role === 'Super Admin' ? 200.0 : role === 'HR Admin' ? 180.0 : 130.0,
+        joinedDate: now.toISOString().split('T')[0],
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+        loginSerial: `STAFF-${Math.floor(1000 + Math.random() * 9000)}`,
+        loginPassword: hashedPassword,
+        status: 'Pending',
+        profileCompleted: false,
+        mustChangePassword: true,
+        adminPermissions: {
+          canViewPayroll: true,
+          canEditPayroll: role === 'Super Admin' || role === 'Owner',
+          canMarkAttendance: true,
+          canManageSites: true,
+          canManageUsers: role === 'Super Admin' || role === 'HR Admin' || role === 'Owner',
+          canAccessSettings: role === 'Super Admin' || role === 'Owner'
+        }
+      };
+      users.push(invitedUser);
+    }
+
     const newInv: RoleInvitation = {
       id: `inv-${Date.now()}`,
       companyId: targetCompanyId || targetCompany?.id || 'comp-001',
       email: normalizedEmail,
       role,
       token,
-      invitedBy: req.currentUser ? `${req.currentUser.name} (${req.currentUser.role})` : 'Umar (Owner)',
+      invitedBy: req.currentUser?.email || 'admin',
       createdAt: now.toISOString().replace('T', ' ').substring(0, 16),
-      expiresAt,
+      expiresAt: expiresAt,
       status: 'Pending'
     };
 
@@ -2120,6 +2158,7 @@ Platform Administration • LMS by Umar`;
         inviteToken: token,
         companyId: companyId || targetCompany?.id || 'comp-001',
         role,
+        initialPassword: tempPassword,
         req
       }).catch(err => console.error('[Background Role Invite Email Error]:', err));
     });
