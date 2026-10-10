@@ -18,8 +18,12 @@ import {
   ChevronRight, 
   HardHat, 
   Database,
-  RefreshCw
+  RefreshCw,
+  QrCode,
+  Camera
 } from 'lucide-react';
+import { QRScannerModal } from '../QRScannerModal';
+import { WorkerQRCodeModal } from '../WorkerQRCodeModal';
 
 interface DashboardViewProps {
   currentUser: User;
@@ -31,6 +35,7 @@ interface DashboardViewProps {
   notices: Notice[];
   setActiveTab: (tab: string) => void;
   onRefreshAttendance?: () => Promise<void>;
+  onSaveAttendance?: (records: Attendance[]) => Promise<void> | void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -42,12 +47,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   complaints,
   notices,
   setActiveTab,
-  onRefreshAttendance
+  onRefreshAttendance,
+  onSaveAttendance
 }) => {
   const { t } = useI18n();
   const todayStr = new Date().toISOString().split('T')[0];
   const [isRefreshingAtt, setIsRefreshingAtt] = React.useState(false);
   const [refreshToast, setRefreshToast] = React.useState<string | null>(null);
+  const [isQRScannerOpen, setIsQRScannerOpen] = React.useState(false);
+  const [myWorkerQRModalOpen, setMyWorkerQRModalOpen] = React.useState(false);
 
   const handleManualRefresh = async () => {
     if (isRefreshingAtt) return;
@@ -167,8 +175,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {currentUser.role !== 'Labor' && (
+        {currentUser.role === 'Labor' ? (
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              id="btn-labor-scan-qr"
+              onClick={() => setIsQRScannerOpen(true)}
+              className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md shadow-amber-500/20 hover:shadow-amber-500/30 transition-all cursor-pointer transform hover:-translate-y-0.5"
+              title="Scan QR to Check In / Out"
+            >
+              <QrCode className="w-4 h-4 text-slate-950 font-bold" />
+              Scan QR (Check In)
+            </button>
+            <button
+              id="btn-labor-my-qr"
+              onClick={() => setMyWorkerQRModalOpen(true)}
+              className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              title="View & Present My Attendance QR Code"
+            >
+              <Camera className="w-4 h-4 text-amber-300" />
+              My QR Badge
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              id="btn-dashboard-scan-qr"
+              onClick={() => setIsQRScannerOpen(true)}
+              className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 rounded-xl text-xs font-black flex items-center gap-2 shadow-md shadow-amber-500/20 hover:shadow-amber-500/30 transition-all cursor-pointer transform hover:-translate-y-0.5"
+              title="Scan Worker QR Attendance with Device Camera / مسح كود الحضور"
+            >
+              <QrCode className="w-4 h-4 text-slate-950 font-bold" />
+              Scan QR
+            </button>
             <button
               onClick={() => {
                 const workerLink = `${window.location.origin}/login/worker?companyToken=${currentUser.companyId || 'tenant'}`;
@@ -675,6 +713,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* QR Attendance Scanner Modal */}
+      <QRScannerModal
+        isOpen={isQRScannerOpen}
+        onClose={() => setIsQRScannerOpen(false)}
+        users={users}
+        sites={sites}
+        attendance={attendance}
+        currentUser={currentUser}
+        onMarkAttendance={async (records) => {
+          if (onSaveAttendance) {
+            await onSaveAttendance(records);
+          }
+          if (onRefreshAttendance) {
+            await onRefreshAttendance();
+          }
+        }}
+      />
+
+      {/* Laborer's Own Worker Attendance QR Badge Modal */}
+      {myWorkerQRModalOpen && (
+        <WorkerQRCodeModal
+          worker={currentUser}
+          site={mySite}
+          onClose={() => setMyWorkerQRModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

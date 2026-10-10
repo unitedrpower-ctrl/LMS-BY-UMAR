@@ -491,7 +491,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 setErrorMessage('');
                 setSuccessMessage('');
                 try {
-                  const res = await masterPasswordLoginApi(otpEmail.trim() || 'umarchoudhary259@gmail.com', otpCode.trim() || 'UmarMaster2026!');
+                  const passToUse = otpCode.trim();
+                  if (!passToUse) {
+                    setErrorMessage('Please enter Master Password.');
+                    return;
+                  }
+                  const res = await masterPasswordLoginApi(otpEmail.trim() || 'umarchoudhary259@gmail.com', passToUse);
                   if (res.success && res.user) {
                     const authToken = `master-jwt-token-${res.user.id}-${Date.now()}`;
                     localStorage.setItem('lms_auth_token', authToken);
@@ -514,7 +519,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               }} className="space-y-2">
                 <input
                   type="password"
-                  placeholder="Master Password (e.g. UmarMaster2026!)"
+                  placeholder="Enter Master Password"
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value)}
                   className="w-full bg-slate-950 border border-amber-500/50 rounded-xl px-3 py-2 text-white font-mono text-xs placeholder-slate-600 focus:outline-none focus:border-amber-400 font-bold"
@@ -540,7 +545,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <input
                   type="text"
                   required
-                  placeholder="admin@laborcorp.com or ADMIN-001"
+                  placeholder="e.g. admin@lms.com or ADMIN-001"
                   value={emailOrSerial}
                   onChange={(e) => setEmailOrSerial(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
@@ -561,12 +566,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
                 />
               </div>
-            </div>
-
-            <div className="p-2.5 bg-slate-950/60 rounded-xl border border-slate-800/80 text-[11px] text-slate-400 space-y-1">
-              <span className="font-bold text-slate-300 block">💡 Quick Credentials for Testing:</span>
-              <p>• Super Admin: <code className="text-indigo-400">admin@laborcorp.com</code> / <code className="text-indigo-400">AdminPass#1</code></p>
-              <p>• HR Manager: <code className="text-indigo-400">david.hr@laborcorp.com</code> / <code className="text-indigo-400">HrPass#2026</code></p>
             </div>
 
             <button
@@ -603,18 +602,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <input
                   type="password"
                   required
-                  placeholder="WorkerPass#1"
+                  placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-amber-500"
                 />
               </div>
-            </div>
-
-            <div className="p-2.5 bg-slate-950/60 rounded-xl border border-slate-800/80 text-[11px] text-slate-400 space-y-1">
-              <span className="font-bold text-amber-400 block">👷 Worker Portal Credentials:</span>
-              <p>• Serial: <code className="text-amber-300">EMP-1001</code> | Password: <code className="text-amber-300">WorkerPass#1</code></p>
-              <p>• Serial: <code className="text-amber-300">EMP-1002</code> | Password: <code className="text-amber-300">WorkerPass#2</code></p>
             </div>
 
             <button

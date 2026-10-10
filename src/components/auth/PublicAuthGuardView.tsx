@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { User, UserRole } from '../../types';
+import React, { useState, useEffect } from 'react';
+import { User, UserRole, RoleInvitation } from '../../types';
 import { LanguageCode, getTranslation } from '../../lib/i18n';
 import { 
   Lock, 
@@ -15,14 +15,18 @@ import {
   RefreshCw,
   Building2,
   Globe,
-  Sparkles
+  Sparkles,
+  Key,
+  BadgeCheck
 } from 'lucide-react';
 import { 
   googleAuthApi, 
   workerLoginApi, 
   adminLoginApi, 
   requestPasswordResetApi, 
-  resetPasswordApi 
+  resetPasswordApi,
+  validateInvitationApi,
+  activateInvitationApi
 } from '../../lib/api';
 
 interface PublicAuthGuardViewProps {
@@ -44,12 +48,22 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
 }) => {
   const t = (key: string, fallback?: string) => getTranslation(lang, key, fallback);
 
-  const [activeTab, setActiveTab] = useState<'adminLogin' | 'workerLogin' | 'signUp' | 'forgotPassword' | 'resetPassword'>('adminLogin');
+  const [activeTab, setActiveTab] = useState<'adminLogin' | 'workerLogin' | 'signUp' | 'forgotPassword' | 'resetPassword' | 'activateInvite'>('adminLogin');
 
   // Form States
   const [emailOrSerial, setEmailOrSerial] = useState('');
   const [password, setPassword] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // Invited User Setup & Activation States
+  const [invitationToken, setInvitationToken] = useState<string | null>(null);
+  const [verifiedInvitation, setVerifiedInvitation] = useState<RoleInvitation | null>(null);
+  const [invitationCompanyName, setInvitationCompanyName] = useState<string>('');
+  const [isValidatingInvite, setIsValidatingInvite] = useState<boolean>(false);
+  const [activateName, setActivateName] = useState('');
+  const [activatePassword, setActivatePassword] = useState('');
+  const [activateConfirmPassword, setActivateConfirmPassword] = useState('');
+  const [isActivatingInvite, setIsActivatingInvite] = useState(false);
   
   // Password Reset States
   const [resetPasswordToken, setResetPasswordToken] = useState<string | null>(null);
@@ -89,6 +103,50 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
   const [googleAccountNumber, setGoogleAccountNumber] = useState('');
   const [googleIban, setGoogleIban] = useState('');
   const [isGoogleProcessing, setIsGoogleProcessing] = useState(false);
+
+  // Detect and validate invitation tokens or parameters from URL on mount
+  useEffect(() => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const token = searchParams.get('token') || searchParams.get('inviteToken') || searchParams.get('invitationToken');
+      const comp = searchParams.get('company') || searchParams.get('companyId') || undefined;
+      const email = searchParams.get('email');
+
+      if (token) {
+        setInvitationToken(token);
+        setIsValidatingInvite(true);
+        validateInvitationApi(token, comp)
+          .then((res) => {
+            if (res.valid && res.invitation) {
+              setVerifiedInvitation(res.invitation);
+              const invitedEmail = res.invitation.email || res.email || '';
+              setSignupEmail(invitedEmail);
+              setEmailOrSerial(invitedEmail);
+              if (res.companyName) setInvitationCompanyName(res.companyName);
+              setActiveTab('activateInvite');
+              setSuccessMessage(`🎉 Official Invitation Verified for ${invitedEmail}! Set your secure account password below to activate your role as ${res.invitation.role}.`);
+            } else if (res.error) {
+              setErrorMessage(res.error);
+            }
+          })
+          .catch((err) => {
+            console.warn('Invite token validation warning:', err.message);
+            if (email) {
+              setEmailOrSerial(email);
+              setSignupEmail(email);
+            }
+          })
+          .finally(() => {
+            setIsValidatingInvite(false);
+          });
+      } else if (email) {
+        setEmailOrSerial(email);
+        setSignupEmail(email);
+      }
+    } catch {
+      // ignore URL parsing error
+    }
+  }, []);
 
   // Google Sign-In Simulation
   const handleGoogleSignIn = async () => {
@@ -163,6 +221,52 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
     setGoogleProfileToComplete(null);
   };
 
+  // Handle Invited Account Activation & Setup
+  const handleActivateInviteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    if (!activatePassword || activatePassword.length < 4) {
+      setErrorMessage('Password must be at least 4 characters long.');
+      return;
+    }
+
+    if (activatePassword !== activateConfirmPassword) {
+      setErrorMessage('Passwords do not match. Please verify.');
+      return;
+    }
+
+    const targetEmail = verifiedInvitation?.email || signupEmail || emailOrSerial;
+    if (!targetEmail) {
+      setErrorMessage('No valid invitation email address specified.');
+      return;
+    }
+
+    setIsActivatingInvite(true);
+    try {
+      const res = await activateInvitationApi({
+        token: invitationToken || undefined,
+        email: targetEmail,
+        name: activateName.trim() || targetEmail.split('@')[0],
+        password: activatePassword.trim()
+      });
+
+      if (res && res.success && res.user) {
+        setSuccessMessage('🎉 Account activated successfully! Logging you in...');
+        setTimeout(() => {
+          onLogin(res.user);
+        }, 500);
+      } else {
+        setErrorMessage(res.message || 'Failed to activate invited account.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to activate invited account. Please try again.');
+    } finally {
+      setIsActivatingInvite(false);
+    }
+  };
+
   // Handle Admin / Staff Login (Single-Tenant Dedicated Direct Login)
   const handleAdminLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -183,14 +287,25 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
       if (apiRes && apiRes.success && apiRes.user) {
         onLogin(apiRes.user);
         return;
+      } else if (apiRes && apiRes.error) {
+        setErrorMessage(apiRes.error);
+        setIsLoggingIn(false);
+        return;
       }
     } catch (err: any) {
-      console.warn('[Admin API Login attempt]:', err.message);
+      const msg = err.message || 'Login failed. Please verify your credentials.';
+      // If error is an authoritative database/server response, display it directly
+      if (!msg.includes('Failed to fetch') && !msg.includes('NetworkError')) {
+        setErrorMessage(msg);
+        setIsLoggingIn(false);
+        return;
+      }
+      console.warn('[Admin API Login network fallback]:', msg);
     } finally {
       setIsLoggingIn(false);
     }
 
-    // 2. Client-side local lookup fallback
+    // 2. Client-side local lookup fallback (offline only)
     const target = users.find(
       (u) => 
         (u.email.toLowerCase() === cleanInput || 
@@ -200,7 +315,6 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
     );
 
     if (!target) {
-      // If not found in non-labor, check if user is a laborer trying to use admin tab
       const isWorker = users.some(u => 
         (u.email.toLowerCase() === cleanInput || u.loginSerial?.toLowerCase() === cleanInput) &&
         u.role === 'Labor'
@@ -213,7 +327,7 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
       return;
     }
 
-    if (target.loginPassword && target.loginPassword !== cleanPass && !target.loginPassword.startsWith('$2b$10$')) {
+    if (target.loginPassword && target.loginPassword !== cleanPass && !target.loginPassword.startsWith('$2b$10$') && !target.loginPassword.startsWith('$pbkdf2$')) {
       setErrorMessage('Invalid Password. Please check your credentials.');
       return;
     }
@@ -262,9 +376,19 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
       if (apiRes && apiRes.success && apiRes.user) {
         onLogin(apiRes.user);
         return;
+      } else if (apiRes && apiRes.error) {
+        setErrorMessage(apiRes.error);
+        setIsLoggingIn(false);
+        return;
       }
     } catch (apiErr: any) {
-      console.warn('[Worker Login API attempt]:', apiErr.message);
+      const msg = apiErr.message || 'Worker login failed. Please verify credentials.';
+      if (!msg.includes('Failed to fetch') && !msg.includes('NetworkError')) {
+        setErrorMessage(msg);
+        setIsLoggingIn(false);
+        return;
+      }
+      console.warn('[Worker Login API network fallback]:', msg);
     } finally {
       setIsLoggingIn(false);
     }
@@ -374,18 +498,21 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
     }
 
     if (users.some((u) => u.email.toLowerCase() === signupEmail.toLowerCase().trim())) {
-      setErrorMessage('An account with this email address already exists.');
+      setErrorMessage('An account with this email address already exists. Please log in.');
       return;
     }
+
+    const hasInvite = Boolean(invitationToken || verifiedInvitation);
+    const assignedRole = verifiedInvitation?.role || requestedRole;
 
     const newUser: User = {
       id: `usr-reg-${Date.now()}`,
       name: name.trim(),
       email: signupEmail.trim(),
-      role: requestedRole,
-      dailyRate: requestedRole === 'Labor' ? 70.0 : 150.0,
+      role: assignedRole,
+      dailyRate: assignedRole === 'Labor' ? 70.0 : 150.0,
       phone,
-      designation: designation || `${requestedRole} (Pending Registration)`,
+      designation: designation || `${assignedRole} (Registered)`,
       joinedDate: new Date().toISOString().split('T')[0],
       avatar: signupAvatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
       bankName: bankName || undefined,
@@ -393,8 +520,26 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
       iban: iban || undefined,
       loginSerial: `EMP-${Math.floor(100 + Math.random() * 900)}`,
       loginPassword: signupPassword,
-      status: 'Pending'
+      status: hasInvite ? 'Active' : 'Pending',
+      profileCompleted: true
     };
+
+    if (hasInvite) {
+      activateInvitationApi({
+        token: invitationToken || undefined,
+        email: newUser.email,
+        name: newUser.name,
+        password: signupPassword
+      }).then((res) => {
+        if (res && res.success && res.user) {
+          onLogin(res.user);
+        }
+      }).catch((err) => {
+        console.warn('Invite activation during signup:', err.message);
+        onSignUp(newUser);
+      });
+      return;
+    }
 
     onSignUp(newUser);
     setPendingUserEmail(newUser.email);
@@ -688,9 +833,9 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
           </div>
         ) : (
           <>
-            {/* Clean Tab Selector: Admin Login | Worker Login | Sign Up */}
+            {/* Clean Tab Selector: Admin Login | Worker Login | Sign Up (or Activate Invite) */}
             {activeTab !== 'forgotPassword' && activeTab !== 'resetPassword' && (
-              <div className="grid grid-cols-3 gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold">
+              <div className={`grid ${verifiedInvitation ? 'grid-cols-4' : 'grid-cols-3'} gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold`}>
                 <button
                   id="tab-btn-admin-login"
                   type="button"
@@ -741,6 +886,25 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                 >
                   <UserPlus className="w-4 h-4 text-emerald-200" /> Sign Up
                 </button>
+
+                {verifiedInvitation && (
+                  <button
+                    id="tab-btn-activate-invite"
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('activateInvite');
+                      setErrorMessage('');
+                      setSuccessMessage('');
+                    }}
+                    className={`py-2.5 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      activeTab === 'activateInvite'
+                        ? 'bg-indigo-600 text-white shadow-md font-extrabold'
+                        : 'text-amber-400 hover:text-amber-300 hover:bg-slate-900'
+                    }`}
+                  >
+                    <BadgeCheck className="w-4 h-4 text-amber-300" /> Invitation
+                  </button>
+                )}
               </div>
             )}
 
@@ -817,45 +981,6 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                   <UserCheck className="w-4 h-4" /> {isLoggingIn ? 'Authenticating...' : 'Log In as Admin / Staff'}
                 </button>
 
-                {/* Quick 1-Click Demo Logins for Testing */}
-                <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-2xl space-y-1.5">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                    ⚡ Quick Demo Credentials (Click to fill):
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEmailOrSerial('unitedrpower@gmail.com');
-                        setPassword('admin123');
-                      }}
-                      className="px-2.5 py-1 bg-slate-800 hover:bg-indigo-900/60 text-slate-200 border border-slate-700 hover:border-indigo-500 rounded-lg text-[10px] font-mono transition-all cursor-pointer"
-                    >
-                      🛡️ Super Admin (Umar)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEmailOrSerial('hr@lms.com');
-                        setPassword('hr123');
-                      }}
-                      className="px-2.5 py-1 bg-slate-800 hover:bg-indigo-900/60 text-slate-200 border border-slate-700 hover:border-indigo-500 rounded-lg text-[10px] font-mono transition-all cursor-pointer"
-                    >
-                      👔 HR Admin (Khalid)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEmailOrSerial('supervisor@lms.com');
-                        setPassword('sup123');
-                      }}
-                      className="px-2.5 py-1 bg-slate-800 hover:bg-indigo-900/60 text-slate-200 border border-slate-700 hover:border-indigo-500 rounded-lg text-[10px] font-mono transition-all cursor-pointer"
-                    >
-                      🏗️ Supervisor (Tariq)
-                    </button>
-                  </div>
-                </div>
-
                 {/* Google Sign In option */}
                 <div className="pt-1">
                   <button
@@ -908,7 +1033,6 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block font-bold text-slate-300">Worker Password *</label>
-                    <span className="text-[10px] text-slate-500 font-mono">Default: 123456</span>
                   </div>
                   <div className="relative">
                     <KeyRound className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
@@ -932,44 +1056,101 @@ export const PublicAuthGuardView: React.FC<PublicAuthGuardViewProps> = ({
                 >
                   <HardHat className="w-4 h-4" /> {isLoggingIn ? 'Verifying...' : 'Access My Worker Portal'}
                 </button>
+              </form>
+            )}
 
-                {/* Quick 1-Click Worker Demo Fill */}
-                <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-2xl space-y-1.5">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                    ⚡ Quick Worker Credentials (Click to fill):
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEmailOrSerial('EMP-101');
-                        setPassword('123456');
-                      }}
-                      className="px-2.5 py-1 bg-slate-800 hover:bg-amber-900/60 text-slate-200 border border-slate-700 hover:border-amber-500 rounded-lg text-[10px] font-mono transition-all cursor-pointer"
-                    >
-                      👷 Ahmed Khan (EMP-101)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEmailOrSerial('EMP-102');
-                        setPassword('123456');
-                      }}
-                      className="px-2.5 py-1 bg-slate-800 hover:bg-amber-900/60 text-slate-200 border border-slate-700 hover:border-amber-500 rounded-lg text-[10px] font-mono transition-all cursor-pointer"
-                    >
-                      🔨 Bilal Hossain (EMP-102)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEmailOrSerial('EMP-103');
-                        setPassword('123456');
-                      }}
-                      className="px-2.5 py-1 bg-slate-800 hover:bg-amber-900/60 text-slate-200 border border-slate-700 hover:border-amber-500 rounded-lg text-[10px] font-mono transition-all cursor-pointer"
-                    >
-                      ⚡ Mohammad Rashid (EMP-103)
-                    </button>
+            {/* Tab: Activate Invited Account & Setup Password */}
+            {activeTab === 'activateInvite' && (
+              <form onSubmit={handleActivateInviteSubmit} className="space-y-4 text-xs">
+                <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl text-indigo-300 space-y-1.5">
+                  <div className="flex items-center gap-1.5 font-extrabold text-indigo-200">
+                    <BadgeCheck className="w-4 h-4 text-indigo-400" />
+                    <span>Official Role Invitation Verified</span>
                   </div>
+                  <p className="text-[11px] text-indigo-300/80 leading-relaxed">
+                    You have been invited to join <strong className="text-white">{invitationCompanyName || 'Al-Bawani Contracting Co.'}</strong> as <span className="px-1.5 py-0.5 bg-indigo-500/20 text-indigo-200 rounded font-bold">{verifiedInvitation?.role || requestedRole}</span>. Complete your profile and configure your password to activate your access.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">Invited Email Address</label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                    <input
+                      type="email"
+                      disabled
+                      value={verifiedInvitation?.email || signupEmail || emailOrSerial}
+                      className="w-full bg-slate-950/70 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-slate-300 font-mono opacity-80 cursor-not-allowed"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">Your Full Name *</label>
+                  <div className="relative">
+                    <UserPlus className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Khalid Al-Mansoor"
+                      value={activateName}
+                      onChange={(e) => setActivateName(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">Configure Secure Password *</label>
+                  <div className="relative">
+                    <KeyRound className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                    <input
+                      type="password"
+                      required
+                      placeholder="••••••••"
+                      value={activatePassword}
+                      onChange={(e) => setActivatePassword(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
+                    />
+                  </div>
+                  <span className="text-[10px] text-slate-500 mt-1 block">Minimum 4 characters</span>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">Confirm Secure Password *</label>
+                  <div className="relative">
+                    <KeyRound className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                    <input
+                      type="password"
+                      required
+                      placeholder="••••••••"
+                      value={activateConfirmPassword}
+                      onChange={(e) => setActivateConfirmPassword(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isActivatingInvite}
+                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" /> {isActivatingInvite ? 'Activating Account...' : `Activate ${verifiedInvitation?.role || 'Staff'} Account & Sign In`}
+                </button>
+
+                <div className="text-center pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('adminLogin');
+                      setErrorMessage('');
+                      setSuccessMessage('');
+                    }}
+                    className="text-[11px] text-slate-400 hover:text-white font-medium cursor-pointer"
+                  >
+                    Already configured your password? Log In
+                  </button>
                 </div>
               </form>
             )}

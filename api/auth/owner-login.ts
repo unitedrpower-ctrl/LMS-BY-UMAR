@@ -30,12 +30,15 @@ export default async function handler(req: any, res: any) {
     return res.status(403).json({ error: 'Master Owner access is restricted to authorized accounts.' });
   }
 
-  const validMasterPasswords = ['UmarMaster2026!', 'MasterOwner#2026', 'admin123'];
-  const isInstantMasterPass = password && validMasterPasswords.includes(password.trim());
-  const isPasscodeInOtpField = otp && validMasterPasswords.includes(otp.trim());
-  const isBypassOtp = otp && otp.trim() === '123456';
+  const validMasterPasswords = [
+    process.env.MASTER_PASSWORD,
+    process.env.OWNER_PASSCODE
+  ].filter(Boolean) as string[];
+  const isInstantMasterPass = Boolean(password && validMasterPasswords.length > 0 && validMasterPasswords.some(p => p.trim() === password.trim()));
+  const isPasscodeInOtpField = Boolean(otp && validMasterPasswords.length > 0 && validMasterPasswords.some(p => p.trim() === otp.trim()));
+  const isBypassOtp = Boolean(process.env.TEST_OTP && otp && otp.trim() === process.env.TEST_OTP.trim());
 
-  // Accept if instant master password, emergency bypass OTP, or test OTP
+  // Accept if instant master password, verified OTP, or emergency bypass OTP from env
   if (!isInstantMasterPass && !isPasscodeInOtpField && !isBypassOtp && !otp) {
     return res.status(400).json({ error: 'Invalid verification code or Master Password.' });
   }

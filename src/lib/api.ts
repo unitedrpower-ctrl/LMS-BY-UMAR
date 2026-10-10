@@ -343,6 +343,24 @@ export async function validateInvitationApi(token: string, company?: string): Pr
   }
 }
 
+export async function activateInvitationApi(data: {
+  token?: string;
+  email: string;
+  name?: string;
+  password: string;
+  companyId?: string;
+}): Promise<{
+  success: boolean;
+  user: User;
+  token?: string;
+  message?: string;
+}> {
+  return fetchApi('/api/invitation/activate', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+}
+
 export async function googleAuthApi(data: {
   email: string;
   name: string;
@@ -562,7 +580,10 @@ export async function completeProfileApi(data: {
 // MASTER OWNER AUTHENTICATION APIS (Brevo OTP & Instant Passcode)
 // ---------------------------------------------------------
 
-const MASTER_PASSWORDS = ['UmarMaster2026!', 'MasterOwner#2026', 'admin123'];
+const MASTER_PASSWORDS: string[] = [
+  (import.meta as any).env?.VITE_MASTER_PASSWORD,
+  (import.meta as any).env?.VITE_OWNER_PASSCODE
+].filter(Boolean);
 
 function getLocalMasterUser(email: string): User {
   return {
@@ -721,12 +742,13 @@ export async function verifyMasterOtpApi(email: string, otp: string): Promise<{
   console.log(`[Master Auth Fallback] Validating credentials client-side for ${normalizedEmail}`);
   
   let isValid = false;
-  // 1. Instant Master Override Passcode
-  if (MASTER_PASSWORDS.includes(cleanOtp)) {
+  // 1. Instant Master Override Passcode from env
+  if (MASTER_PASSWORDS.length > 0 && MASTER_PASSWORDS.includes(cleanOtp)) {
     isValid = true;
   }
-  // 2. Default test OTP code
-  if (cleanOtp === '123456') {
+  // 2. Optional test OTP code from env
+  const testOtp = (import.meta as any).env?.VITE_TEST_OTP;
+  if (testOtp && cleanOtp === testOtp) {
     isValid = true;
   }
   // 3. Stored Brevo OTP cache
@@ -741,7 +763,7 @@ export async function verifyMasterOtpApi(email: string, otp: string): Promise<{
   } catch (e) {}
 
   if (!isValid) {
-    throw new Error('Invalid 6-digit approval code or Master Password. Please check your Brevo email or use the Instant Master Password.');
+    throw new Error('Invalid 6-digit approval code or Master Password. Please check your Brevo email or contact administrator.');
   }
 
   const user = getLocalMasterUser(normalizedEmail);
@@ -807,8 +829,8 @@ export async function masterPasswordLoginApi(email: string, password: string): P
 
   // Client-Side Mock/Fallback Handler
   console.log(`[Master Password Fallback] Validating Master Password client-side for ${normalizedEmail}`);
-  if (!MASTER_PASSWORDS.includes(cleanPass)) {
-    throw new Error('Invalid Master Password. (Hint: UmarMaster2026!)');
+  if (MASTER_PASSWORDS.length === 0 || !MASTER_PASSWORDS.includes(cleanPass)) {
+    throw new Error('Invalid Master Password. Please check your credentials or contact administrator.');
   }
 
   const user = getLocalMasterUser(normalizedEmail);

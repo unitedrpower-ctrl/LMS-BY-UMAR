@@ -35,7 +35,7 @@
       "iqamaId": "1000000259",
       "passportNumber": "OWNER-259",
       "loginSerial": "OWNER-259",
-      "loginPassword": "OwnerPass#259",
+      "loginPassword": "$pbkdf2$1000$42a5a3fa31d8445cad50f88ced056054$48418fb23bb0cc184f0bccfd8b6b84afe3e86b8c78d36bcaccf9b61c1170d096",
       "status": "Active",
       "isGoogleUser": true,
       "profileCompleted": true,
@@ -62,7 +62,7 @@
       "iqamaId": "1000000001",
       "passportNumber": "OWNER-001",
       "loginSerial": "ADMIN-01",
-      "loginPassword": "admin123",
+      "loginPassword": "$pbkdf2$1000$6cff389916ea3e69fa985ac3c769242b$0d1a7f77ef15e64a8ae41a83ec72cad3a528cefeb891d0776463330d03d4737d",
       "status": "Active",
       "isGoogleUser": true,
       "profileCompleted": true,
@@ -89,7 +89,7 @@
       "iqamaId": "1000000002",
       "passportNumber": "HR-002",
       "loginSerial": "HR-01",
-      "loginPassword": "hr123",
+      "loginPassword": "$pbkdf2$1000$457ae0f4f3fc3ef460360cb0f88ac796$76e0281bc10098a148a4e910579f5df093afecd12436e1f848ff62181fce8657",
       "status": "Active",
       "profileCompleted": true,
       "adminPermissions": {
@@ -116,7 +116,7 @@
       "iqamaId": "1000000003",
       "passportNumber": "SUP-003",
       "loginSerial": "SUP-01",
-      "loginPassword": "sup123",
+      "loginPassword": "$pbkdf2$1000$0c8c49e5377a7df3302eb2e8c7a68b97$31182896f43150713bcbc25def7bb2a04586e837a96760ed0fcc2196f7f6b158",
       "status": "Active",
       "profileCompleted": true,
       "adminPermissions": {
@@ -145,7 +145,7 @@
       "passportNumber": "P8920192",
       "sponsorName": "Direct Company Hire",
       "loginSerial": "EMP-101",
-      "loginPassword": "123456",
+      "loginPassword": "$pbkdf2$1000$d1a3990f6f112b55272aaa60b9fb9968$ebb43a80becadf56b0237a6136006e0d7003369c9fae2a9170895ce7d093106c",
       "bankName": "Al-Rajhi Bank",
       "accountNumber": "8810293847",
       "iban": "SA4480000881029384700001",
@@ -169,7 +169,7 @@
       "passportNumber": "P4729103",
       "sponsorName": "Direct Company Hire",
       "loginSerial": "EMP-102",
-      "loginPassword": "123456",
+      "loginPassword": "$pbkdf2$1000$30e83310facf3b794a0a3922434dd478$2946464149ccaf567222d84cf16493831ebec09dee45432222d5c758dd279be0",
       "bankName": "SNB Al-Ahli",
       "accountNumber": "4472910382",
       "iban": "SA2210000447291038200001",
@@ -193,7 +193,7 @@
       "passportNumber": "P3819201",
       "sponsorName": "Al-Rashid Subcontracting",
       "loginSerial": "EMP-103",
-      "loginPassword": "123456",
+      "loginPassword": "$pbkdf2$1000$8dc6bd16c6e5ab46496878d19d82cb9e$458c09017af9c3a6697e4a1c977164609c65a3413ee6a407a507cac7eec960ef",
       "bankName": "Riyad Bank",
       "accountNumber": "3381920194",
       "iban": "SA5520000338192019400001",
@@ -217,12 +217,35 @@
       "passportNumber": "P1928374",
       "sponsorName": "Direct Company Hire",
       "loginSerial": "EMP-104",
-      "loginPassword": "123456",
+      "loginPassword": "$pbkdf2$1000$24ae340da2b8d9c1bd6ec6e3373c0b19$f087dffedd6896499c93ecc865210a28fc90a9e3600a826965a96eebefe97d95",
       "bankName": "Alinma Bank",
       "accountNumber": "5519283746",
       "iban": "SA1105000551928374600001",
       "status": "Active",
       "profileCompleted": true
+    },
+    {
+      "id": "usr-inv-1791627268754",
+      "companyId": "comp-001",
+      "name": "Salim HR Manager",
+      "email": "invited.hr@albawani.sa",
+      "role": "HR Admin",
+      "dailyRate": 180,
+      "joinedDate": "2026-10-10",
+      "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+      "loginSerial": "STAFF-7196",
+      "loginPassword": "$pbkdf2$1000$88f2a1e819d39294b03993967d47b873$7383f42a4f7ae10580692001e12841f62c9d4725828e62b94afb01921ecd90e2",
+      "status": "Active",
+      "profileCompleted": true,
+      "mustChangePassword": false,
+      "adminPermissions": {
+        "canViewPayroll": true,
+        "canEditPayroll": false,
+        "canMarkAttendance": true,
+        "canManageSites": true,
+        "canManageUsers": true,
+        "canAccessSettings": false
+      }
     }
   ],
   "sites": [
@@ -481,6 +504,20 @@
       "createdAt": "2026-09-08T07:08:47.086Z",
       "expiresAt": "2027-09-08T07:08:47.086Z",
       "status": "Pending"
+    },
+    {
+      "id": "inv-1791627268738",
+      "companyId": "comp-001",
+      "email": "invited.hr@albawani.sa",
+      "role": "HR Admin",
+      "token": "inv-tok-1791627268738-6012",
+      "invitedBy": "Umar (Owner)",
+      "createdAt": "2026-10-10 10:14",
+      "expiresAt": "2026-11-09 10:14",
+      "status": "Accepted",
+      "isUsed": true,
+      "acceptedAt": "2026-10-10T10:14:28.754Z",
+      "acceptedUserId": "usr-inv-1791627268754"
     }
   ],
   "documents": [
@@ -499,5 +536,5 @@
       "targetAudience": "All Staff"
     }
   ],
-  "lastSavedAt": "2026-10-08T11:07:25.851Z"
+  "lastSavedAt": "2026-10-10T10:16:46.382Z"
 }

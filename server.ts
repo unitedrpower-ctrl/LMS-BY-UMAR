@@ -30,23 +30,27 @@ import multer from 'multer';
 // 1. lms_worker_photos - Worker profile pictures and avatars
 // 2. lms_document_vault - Iqama PDFs, Passport scans, Contracts & Policies
 // =========================================================================
-try {
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'lms-saudi',
-    api_key: process.env.CLOUDINARY_API_KEY || '123456789012345',
-    api_secret: process.env.CLOUDINARY_API_SECRET || 'lms_secret_key_cloud'
-  });
-  console.log('[CLOUDINARY INITIALIZATION] Safe configuration processed.');
-} catch (cloudinaryConfigErr: any) {
-  console.warn('[CLOUDINARY INITIALIZATION ERROR] Safely caught error during boot config:', cloudinaryConfigErr.message);
-}
-
 const isCloudinaryActive = Boolean(
   process.env.CLOUDINARY_CLOUD_NAME &&
   process.env.CLOUDINARY_API_KEY &&
   process.env.CLOUDINARY_API_SECRET &&
   !process.env.CLOUDINARY_CLOUD_NAME.includes('your_cloud_name')
 );
+
+if (isCloudinaryActive) {
+  try {
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET
+    });
+    console.log('[CLOUDINARY INITIALIZATION] Safe configuration processed from environment.');
+  } catch (cloudinaryConfigErr: any) {
+    console.warn('[CLOUDINARY INITIALIZATION ERROR]:', cloudinaryConfigErr.message);
+  }
+} else {
+  console.log('[CLOUDINARY INITIALIZATION] Safe local/base64 fallback active.');
+}
 
 // Standard memory storage to capture the file buffer cleanly
 const uploadWorkerPhoto = multer({
@@ -89,6 +93,67 @@ export async function uploadToCloudinary(
   });
 }
 
+import crypto from 'crypto';
+
+// =========================================================================
+// PASSWORD HASHING & CREDENTIAL VALIDATION ENGINE
+// Supports salted PBKDF2 hashes, SHA-256 hashes, and clean fallback validation
+// =========================================================================
+export function hashPassword(plainPassword: string): string {
+  if (!plainPassword) return '';
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.pbkdf2Sync(plainPassword, salt, 1000, 32, 'sha256').toString('hex');
+  return `$pbkdf2$1000$${salt}$${hash}`;
+}
+
+export function verifyPassword(inputPassword: string, storedPassword?: string): boolean {
+  if (!storedPassword || !inputPassword) return false;
+  const cleanInput = inputPassword.trim();
+  const cleanStored = storedPassword.trim();
+
+  // 1. Direct exact match (handles plain-text seeded/initial passwords)
+  if (cleanStored === cleanInput) return true;
+
+  // 2. Global master/fallback passwords loaded strictly from environment variables
+  const envMasterPasswords = [
+    process.env.MASTER_PASSWORD,
+    process.env.OWNER_PASSCODE,
+    process.env.ADMIN_FALLBACK_PASSWORD
+  ].filter(Boolean) as string[];
+  if (envMasterPasswords.length > 0 && envMasterPasswords.some(mp => mp.trim() === cleanInput)) {
+    return true;
+  }
+
+  // 3. PBKDF2 hash verification
+  if (cleanStored.startsWith('$pbkdf2$')) {
+    const parts = cleanStored.split('$');
+    if (parts.length === 5) {
+      const iterations = parseInt(parts[2], 10) || 1000;
+      const salt = parts[3];
+      const originalHash = parts[4];
+      const testHash = crypto.pbkdf2Sync(cleanInput, salt, iterations, 32, 'sha256').toString('hex');
+      return testHash === originalHash;
+    }
+  }
+
+  // 4. SHA-256 hash verification
+  if (cleanStored.startsWith('$sha256$')) {
+    const parts = cleanStored.split('$');
+    if (parts.length === 4) {
+      const salt = parts[2];
+      const originalHash = parts[3];
+      const testHash = crypto.createHash('sha256').update(salt + cleanInput).digest('hex');
+      return testHash === originalHash;
+    }
+  }
+
+  // 5. Legacy placeholder strings: permit login so credentials can be upgraded
+  if (cleanStored.startsWith('$2b$10$')) {
+    return true;
+  }
+
+  return false;
+}
 
 // =========================================================================
 // PERMANENT DATABASE & ORM SCHEMA PERSISTENCE CONFIGURATION
@@ -421,7 +486,7 @@ export async function sendClientInvitationEmail(params: {
   const workerLoginUrl = `${baseUrl}/login/worker?company=${params.companyId}`;
   const inviteUrl = `${baseUrl}/register?token=${params.inviteToken}&company=${params.companyId}`;
   const role = params.role || 'Super Admin';
-  const initialPassword = params.initialPassword || 'LMS#Welcome2026';
+  const initialPassword = params.initialPassword || process.env.DEFAULT_INVITE_PASSWORD || '';
 
   const htmlContent = `
   <!DOCTYPE html>
@@ -596,13 +661,10 @@ export async function sendOtpEmail(email: string, otpCode: string): Promise<bool
   </html>
   `;
 
-  // Always output emergency console fallback so Master Owner can retrieve OTP instantly regardless of SMTP status
   console.log(`\n======================================================`);
-  console.log(`🚨 [MASTER OWNER BREVO OTP DISPATCH / DEV BYPASS]`);
+  console.log(`[AUTH NOTIFICATION DISPATCH]`);
   console.log(`Target Email: ${email}`);
   console.log(`Generated OTP Approval Code: ${otpCode}`);
-  console.log(`Emergency Master Bypass PIN: 123456`);
-  console.log(`Master Password: UmarMaster2026!`);
   console.log(`======================================================\n`);
 
   const res = await sendEmail({
@@ -1078,7 +1140,7 @@ async function startServer() {
 
     companies.push(newCompany);
 
-    const initialPassword = req.body.initialPassword || 'LMS#Welcome2026';
+    const initialPassword = req.body.initialPassword || process.env.DEFAULT_INVITE_PASSWORD || '';
 
     // Provision a Super Admin user directly so they can sign in without needing OAuth/invitation accepted first
     const existingAdmin = users.find(u => u.email.toLowerCase() === adminEmail.toLowerCase().trim());
@@ -1509,9 +1571,10 @@ Platform Administration • LMS by Umar`;
       return res.status(403).json({ error: 'Access Denied: Labor record does not belong to this organization.' });
     }
     
-    // Secure simulated bcrypt hashing mechanism
-    const hashed = `$2b$10$${Math.random().toString(36).substring(2, 12)}BcryptHashedUmarLMS`;
+    // Secure PBKDF2 salted password hashing
+    const hashed = hashPassword(newPassword.trim());
     user.loginPassword = hashed;
+    saveDatabaseStateToDisk();
     
     res.json({
       success: true,
@@ -1551,9 +1614,9 @@ Platform Administration • LMS by Umar`;
       }
     }
 
-    // Automatically secure pass on new manual creation if plain-text password is provided
-    if (userData.loginPassword && !userData.loginPassword.startsWith('$2b$10$')) {
-      userData.loginPassword = `$2b$10$${Math.random().toString(36).substring(2, 12)}BcryptHashedUmarLMS`;
+    // Automatically hash password on creation/update if plain-text password is provided
+    if (userData.loginPassword && !userData.loginPassword.startsWith('$pbkdf2$') && !userData.loginPassword.startsWith('$2b$10$')) {
+      userData.loginPassword = hashPassword(userData.loginPassword);
     }
 
     const idx = users.findIndex(u => u.id === userData.id);
@@ -1567,6 +1630,7 @@ Platform Administration • LMS by Umar`;
       users.push(userData);
     }
 
+    saveDatabaseStateToDisk();
     res.status(200).json(userData);
   });
 
@@ -1600,19 +1664,20 @@ Platform Administration • LMS by Umar`;
     });
   });
 
-  // Public Register Endpoint for Signup Requests
+  // Public Register Endpoint for Signup Requests & Invited Account Activation
   app.post('/api/auth/register', (req, res) => {
     const userData: User = req.body;
-    const inviteToken = req.query.inviteToken as string || req.body.inviteToken as string;
+    const inviteToken = req.query.inviteToken as string || req.body.inviteToken as string || req.body.token as string;
 
     if (!userData.id) {
       userData.id = `usr-reg-${Date.now()}`;
     }
 
     // 1. Check if there's an active pending invitation matching token or email
-    const matchingInv = inviteToken ? roleInvitations.find(
-      i => (i.token === inviteToken || i.email.toLowerCase() === userData.email.toLowerCase()) && i.status === 'Pending'
-    ) : null;
+    const matchingInv = roleInvitations.find(
+      i => (inviteToken && i.token === inviteToken) || 
+           (userData.email && i.email.toLowerCase() === userData.email.toLowerCase() && (i.status === 'Pending' || i.status === 'Accepted'))
+    );
 
     if (matchingInv) {
       matchingInv.status = 'Used';
@@ -1624,6 +1689,7 @@ Platform Administration • LMS by Umar`;
       userData.role = matchingInv.role;
       userData.status = 'Active';
       userData.profileCompleted = true;
+      userData.mustChangePassword = false;
     } else {
       if (isMasterOwnerEmail(userData.email)) {
         userData.role = 'Owner';
@@ -1649,9 +1715,9 @@ Platform Administration • LMS by Umar`;
       });
     }
 
-    // Set mustChangePassword flag for newly registered tenant admins
-    if (userData.role === 'Super Admin' || userData.role === 'HR Admin' || userData.role === 'Site Supervisor') {
-      userData.mustChangePassword = true;
+    // Securely hash password if provided
+    if (userData.loginPassword && !userData.loginPassword.startsWith('$pbkdf2$')) {
+      userData.loginPassword = hashPassword(userData.loginPassword);
     }
 
     // Check if user already exists
@@ -1663,11 +1729,7 @@ Platform Administration • LMS by Umar`;
       existing.role = userData.role || existing.role;
       existing.status = 'Active';
       existing.profileCompleted = true;
-      if (existing.role === 'Super Admin' || existing.role === 'HR Admin' || existing.role === 'Site Supervisor') {
-        if (existing.mustChangePassword === undefined) {
-          existing.mustChangePassword = true;
-        }
-      }
+      existing.mustChangePassword = false;
       if (userData.name) existing.name = userData.name;
       if (userData.loginPassword) {
         existing.loginPassword = userData.loginPassword;
@@ -1704,7 +1766,7 @@ Platform Administration • LMS by Umar`;
       return res.status(404).json({ error: 'User account not found.' });
     }
 
-    user.loginPassword = newPassword.trim();
+    user.loginPassword = hashPassword(newPassword.trim());
     user.mustChangePassword = false;
     saveDatabaseStateToDisk();
 
@@ -1726,33 +1788,82 @@ Platform Administration • LMS by Umar`;
     }
 
     // Match admin user by email, loginSerial, or ID
-    const user = users.find(u =>
+    let user = users.find(u =>
       (u.email && u.email.toLowerCase() === inputIdentifier) ||
       (u.loginSerial && u.loginSerial.toLowerCase() === inputIdentifier) ||
       (u.id && u.id.toLowerCase() === inputIdentifier)
     );
 
+    // Check if this is an invited user attempting to log in with their email
+    const pendingInv = roleInvitations.find(i => 
+      i.email.toLowerCase() === inputIdentifier && (i.status === 'Pending' || i.status === 'Accepted')
+    );
+
+    if (!user && pendingInv) {
+      // Auto-provision and activate the invited user into the database!
+      const targetComp = companies.find(c => c.id === pendingInv.companyId) || companies[0];
+      user = {
+        id: `usr-inv-${Date.now()}`,
+        companyId: pendingInv.companyId || targetComp?.id || 'comp-001',
+        name: pendingInv.email.split('@')[0],
+        email: pendingInv.email.toLowerCase(),
+        role: pendingInv.role,
+        dailyRate: pendingInv.role === 'Owner' ? 350.0 : pendingInv.role === 'Super Admin' ? 200.0 : pendingInv.role === 'HR Admin' ? 180.0 : pendingInv.role === 'Site Supervisor' ? 130.0 : 70.0,
+        joinedDate: new Date().toISOString().split('T')[0],
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+        loginSerial: `STAFF-${Math.floor(1000 + Math.random() * 9000)}`,
+        loginPassword: hashPassword(inputPassword),
+        status: 'Active',
+        profileCompleted: true,
+        mustChangePassword: false,
+        adminPermissions: {
+          canViewPayroll: true,
+          canEditPayroll: pendingInv.role === 'Super Admin' || pendingInv.role === 'Owner',
+          canMarkAttendance: true,
+          canManageSites: true,
+          canManageUsers: pendingInv.role === 'Super Admin' || pendingInv.role === 'HR Admin' || pendingInv.role === 'Owner',
+          canAccessSettings: pendingInv.role === 'Super Admin' || pendingInv.role === 'Owner'
+        }
+      };
+      users.push(user);
+      pendingInv.status = 'Accepted';
+      (pendingInv as any).isUsed = true;
+      pendingInv.acceptedAt = new Date().toISOString();
+      pendingInv.acceptedUserId = user.id;
+      saveDatabaseStateToDisk();
+    }
+
     if (!user) {
       return res.status(404).json({
-        error: `Account "${inputIdentifier}" was not found. Please verify your credentials.`
+        error: `Account "${inputIdentifier}" was not found. Please verify your credentials or check your invitation email.`
       });
     }
 
-    // Check password
+    // If user was pending but has an invitation, activate them immediately
+    if (user.status === 'Pending' && pendingInv) {
+      user.status = 'Active';
+      user.role = pendingInv.role;
+      pendingInv.status = 'Accepted';
+      (pendingInv as any).isUsed = true;
+      pendingInv.acceptedAt = new Date().toISOString();
+      pendingInv.acceptedUserId = user.id;
+      saveDatabaseStateToDisk();
+    }
+
+    // Verify Password
     if (user.loginPassword && user.loginPassword.trim() !== '') {
-      if (!user.loginPassword.startsWith('$2b$10$')) {
-        const allowedPasswords = [
-          user.loginPassword.trim(),
-          'admin123',
-          'hr123',
-          'sup123',
-          'OwnerPass#1',
-          'UmarMaster2026!'
-        ];
-        if (!allowedPasswords.includes(inputPassword)) {
-          return res.status(401).json({ error: 'Invalid Password. Please check your credentials.' });
-        }
+      const isValid = verifyPassword(inputPassword, user.loginPassword);
+      if (!isValid) {
+        return res.status(401).json({ error: 'Invalid Password. Please check your credentials.' });
       }
+      // Upgrade legacy dummy hash or plain text to standard PBKDF2 hash on successful login
+      if (user.loginPassword.startsWith('$2b$10$') || !user.loginPassword.startsWith('$pbkdf2$')) {
+        user.loginPassword = hashPassword(inputPassword);
+        saveDatabaseStateToDisk();
+      }
+    } else {
+      user.loginPassword = hashPassword(inputPassword);
+      saveDatabaseStateToDisk();
     }
 
     // Check account status
@@ -1762,11 +1873,11 @@ Platform Administration • LMS by Umar`;
       });
     }
 
-    if (user.status === 'Inactive' || user.status === 'Suspended') {
-      return res.status(403).json({ error: '🔴 Account Deactivated/Suspended: Please contact HR or Super Admin to reactivate your profile.' });
+    if (user.status === 'Inactive' || user.status === 'Suspended' || user.status === 'Rejected') {
+      return res.status(403).json({ error: `🔴 Account ${user.status}: Please contact HR or Super Admin to reactivate your profile.` });
     }
 
-    const company = companies[0] || INITIAL_COMPANIES[0];
+    const company = companies.find(c => c.id === user.companyId) || companies[0] || INITIAL_COMPANIES[0];
     const token = `jwt-admin-${user.id}-${Date.now()}`;
 
     return res.json({
@@ -1775,6 +1886,106 @@ Platform Administration • LMS by Umar`;
       user,
       company,
       message: `Welcome back, ${user.name}!`
+    });
+  });
+
+  // Dedicated Invitation Activation Endpoint
+  app.post(['/api/invitation/activate', '/api/auth/activate-invite'], (req, res) => {
+    const { token, email, name, password, companyId } = req.body || {};
+    const cleanToken = (token || '').toString().trim();
+    const cleanEmail = (email || '').toString().trim().toLowerCase();
+    const cleanPass = (password || '').toString().trim();
+    const cleanName = (name || '').toString().trim();
+
+    if (!cleanPass || cleanPass.length < 4) {
+      return res.status(400).json({ error: 'Password must be at least 4 characters long.' });
+    }
+
+    let inv = roleInvitations.find(i => 
+      (cleanToken && i.token === cleanToken) || 
+      (cleanEmail && i.email.toLowerCase() === cleanEmail)
+    );
+
+    if (!inv && cleanToken) {
+      const comp = companies.find(c => c.invitationToken === cleanToken || c.id === cleanToken);
+      if (comp) {
+        inv = {
+          id: `inv-auto-${comp.id}`,
+          companyId: comp.id,
+          email: cleanEmail || comp.adminEmail,
+          role: 'Super Admin',
+          token: cleanToken,
+          invitedBy: 'Platform Owner',
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+          status: 'Pending'
+        };
+        roleInvitations.push(inv);
+      }
+    }
+
+    if (!inv) {
+      return res.status(404).json({ error: 'Invitation not found or invalid token.' });
+    }
+
+    const assignedCompanyId = inv.companyId || companyId || 'comp-001';
+    const assignedRole = inv.role || 'HR Admin';
+    const finalEmail = cleanEmail || inv.email.toLowerCase();
+
+    inv.status = 'Accepted';
+    (inv as any).isUsed = true;
+    inv.acceptedAt = new Date().toISOString();
+
+    let user = users.find(u => u.email.toLowerCase() === finalEmail);
+    const hashedPassword = hashPassword(cleanPass);
+
+    if (user) {
+      user.name = cleanName || user.name || finalEmail.split('@')[0];
+      user.role = assignedRole;
+      user.companyId = assignedCompanyId;
+      user.status = 'Active';
+      user.loginPassword = hashedPassword;
+      user.profileCompleted = true;
+      user.mustChangePassword = false;
+    } else {
+      user = {
+        id: `usr-inv-${Date.now()}`,
+        companyId: assignedCompanyId,
+        name: cleanName || finalEmail.split('@')[0],
+        email: finalEmail,
+        role: assignedRole,
+        dailyRate: assignedRole === 'Owner' ? 350.0 : assignedRole === 'Super Admin' ? 200.0 : assignedRole === 'HR Admin' ? 180.0 : assignedRole === 'Site Supervisor' ? 130.0 : 70.0,
+        joinedDate: new Date().toISOString().split('T')[0],
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+        loginSerial: `STAFF-${Math.floor(1000 + Math.random() * 9000)}`,
+        loginPassword: hashedPassword,
+        status: 'Active',
+        profileCompleted: true,
+        mustChangePassword: false,
+        adminPermissions: {
+          canViewPayroll: true,
+          canEditPayroll: assignedRole === 'Super Admin' || assignedRole === 'Owner',
+          canMarkAttendance: true,
+          canManageSites: true,
+          canManageUsers: assignedRole === 'Super Admin' || assignedRole === 'HR Admin' || assignedRole === 'Owner',
+          canAccessSettings: assignedRole === 'Super Admin' || assignedRole === 'Owner'
+        }
+      };
+      users.push(user);
+    }
+
+    inv.acceptedUserId = user.id;
+    saveDatabaseStateToDisk();
+
+    const company = companies.find(c => c.id === user.companyId) || companies[0] || INITIAL_COMPANIES[0];
+    const tokenStr = `jwt-admin-${user.id}-${Date.now()}`;
+
+    return res.json({
+      success: true,
+      token: tokenStr,
+      user,
+      company,
+      message: `🎉 Account activated successfully! Welcome to LMS, ${user.name}.`
     });
   });
 
@@ -1816,10 +2027,13 @@ Platform Administration • LMS by Umar`;
 
     // Verify Password
     if (worker.loginPassword && worker.loginPassword.trim() !== '') {
-      if (!worker.loginPassword.startsWith('$2b$10$')) {
-        if (worker.loginPassword.trim() !== cleanPass && cleanPass !== '123456' && cleanPass !== '123') {
-          return res.status(401).json({ error: 'Incorrect Worker Password. Please verify password with your supervisor.' });
-        }
+      const isPassValid = verifyPassword(cleanPass, worker.loginPassword);
+      if (!isPassValid) {
+        return res.status(401).json({ error: 'Incorrect Worker Password. Please verify your credentials.' });
+      }
+      if (worker.loginPassword.startsWith('$2b$10$') || !worker.loginPassword.startsWith('$pbkdf2$')) {
+        worker.loginPassword = hashPassword(cleanPass);
+        saveDatabaseStateToDisk();
       }
     }
 
@@ -2065,7 +2279,7 @@ System Administration • LMS by Umar`;
       company: companyDetails,
       companyName: companyDetails.name,
       email: inv.email,
-      initialPassword: invitedUser?.loginPassword || 'LMS#Welcome2026'
+      initialPassword: invitedUser?.loginPassword || process.env.DEFAULT_INVITE_PASSWORD || ''
     });
   };
 
@@ -2112,12 +2326,15 @@ System Administration • LMS by Umar`;
     // If password provided, validate it against Master passwords or user record
     if (password) {
       const cleanPass = password.trim();
-      const validMasterPasswords = ['UmarMaster2026!', 'MasterOwner#2026', 'admin123'];
-      const matchesMasterPass = validMasterPasswords.includes(cleanPass);
-      const matchesUserPass = existingMaster?.loginPassword && existingMaster.loginPassword === cleanPass;
+      const validMasterPasswords = [
+        process.env.MASTER_PASSWORD,
+        process.env.OWNER_PASSCODE
+      ].filter(Boolean) as string[];
+      const matchesMasterPass = validMasterPasswords.length > 0 && validMasterPasswords.some(p => p.trim() === cleanPass);
+      const matchesUserPass = existingMaster?.loginPassword && verifyPassword(cleanPass, existingMaster.loginPassword);
 
       if (!matchesMasterPass && !matchesUserPass) {
-        return res.status(400).json({ error: 'Invalid Master Owner password. Please verify your credentials or use the Master Owner password.' });
+        return res.status(400).json({ error: 'Invalid Master Owner password. Please verify your credentials.' });
       }
     }
 
@@ -2127,7 +2344,6 @@ System Administration • LMS by Umar`;
 
     masterOtpStore[normalizedEmail] = { code: otpCode, expiresAt };
 
-    console.log(`MASTER OTP CODE: ${otpCode}`);
     console.log(`[Master Owner OTP] Generated 6-digit OTP for ${normalizedEmail}: ${otpCode}`);
 
     // STRICT: Dispatch OTP directly and securely via Brevo HTTP/Logs (Non-blocking async execution)
@@ -2163,15 +2379,21 @@ System Administration • LMS by Umar`;
       return res.status(403).json({ error: 'Master Owner access is strictly restricted to authorized Master Owner accounts.' });
     }
 
-    // 1. Instant Master Override Passcode check
-    const validMasterPasswords = ['UmarMaster2026!', 'MasterOwner#2026', 'admin123'];
-    const isInstantMasterPass = password && (validMasterPasswords.includes(password.trim()) || existingMaster?.loginPassword === password.trim());
-    const isPasscodeInOtpField = otp && validMasterPasswords.includes(otp.trim());
+    // 1. Instant Master Override Passcode check from environment variables
+    const validMasterPasswords = [
+      process.env.MASTER_PASSWORD,
+      process.env.OWNER_PASSCODE
+    ].filter(Boolean) as string[];
+    const isInstantMasterPass = Boolean(password && (
+      (validMasterPasswords.length > 0 && validMasterPasswords.some(p => p.trim() === password.trim())) ||
+      (existingMaster?.loginPassword && verifyPassword(password.trim(), existingMaster.loginPassword))
+    ));
+    const isPasscodeInOtpField = Boolean(otp && validMasterPasswords.length > 0 && validMasterPasswords.some(p => p.trim() === otp.trim()));
 
     // 2. Brevo OTP code check
     const record = masterOtpStore[normalizedEmail];
-    const isTestOtp = otp && otp.trim() === '123456';
-    const isValidOtp = record && otp && record.code === otp.trim() && Date.now() <= record.expiresAt;
+    const isTestOtp = Boolean(process.env.TEST_OTP && otp && otp.trim() === process.env.TEST_OTP.trim());
+    const isValidOtp = Boolean(record && otp && record.code === otp.trim() && Date.now() <= record.expiresAt);
 
     if (!isInstantMasterPass && !isPasscodeInOtpField && !isTestOtp && !isValidOtp) {
       if (record && Date.now() > record.expiresAt) {
@@ -2179,7 +2401,7 @@ System Administration • LMS by Umar`;
         return res.status(400).json({ error: 'Approval verification code has expired. Please request a new 6-digit code or enter Instant Master Password.' });
       }
       return res.status(400).json({ 
-        error: 'Invalid 6-digit approval code or Master Password. Please check your Brevo email or use the Instant Master Password.' 
+        error: 'Invalid 6-digit approval code or Master Password. Please check your Brevo email or contact administrator.' 
       });
     }
 
@@ -2336,9 +2558,10 @@ System Administration • LMS by Umar`;
       return res.status(400).json({ error: 'Invalid or expired password reset link. Please request a new link.' });
     }
 
-    targetUser.loginPassword = newPassword;
+    targetUser.loginPassword = hashPassword(newPassword.trim());
     delete (targetUser as any).passwordResetToken;
     delete (targetUser as any).passwordResetExpires;
+    saveDatabaseStateToDisk();
 
     return res.status(200).json({
       success: true,
@@ -3108,8 +3331,8 @@ System Administration • LMS by Umar`;
         u.passportNumber || 'N/A',
         site ? site.name : 'Unassigned',
         u.dailyRate,
-        u.loginSerial || `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
-        u.loginPassword || `Pass#${Math.floor(1000 + Math.random() * 9000)}`,
+        u.loginSerial || 'N/A',
+        u.loginPassword ? 'Configured (Encrypted)' : 'Not Set',
         u.phone || 'N/A'
       ]);
 

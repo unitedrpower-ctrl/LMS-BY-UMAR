@@ -114,6 +114,8 @@ export interface Attendance {
   notes?: string;
   overtimeHours?: number; // Hours worked extra
   isFridayOvertime?: boolean; // Worked on Friday
+  checkInTime?: string; // HH:mm:ss check-in timestamp
+  checkOutTime?: string; // HH:mm:ss check-out timestamp
 }
 
 export interface GovHoliday {

@@ -553,17 +553,16 @@ export default function App() {
       alert('Access Denied: Only Super Admin can manage staff passwords.');
       return;
     }
-    
-    const localHash = `$2b$10$${Math.random().toString(36).substring(2, 12)}BcryptHashed`;
-    setUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, loginPassword: localHash } : u))
-    );
 
     try {
       const response = await updateUserPasswordApi(userId, newPassword, currentUser);
       if (response && response.hashedPassword) {
         setUsers((prev) =>
           prev.map((u) => (u.id === userId ? { ...u, loginPassword: response.hashedPassword! } : u))
+        );
+      } else {
+        setUsers((prev) =>
+          prev.map((u) => (u.id === userId ? { ...u, loginPassword: newPassword } : u))
         );
       }
     } catch (e: any) {
@@ -603,6 +602,7 @@ export default function App() {
             notices={notices}
             setActiveTab={setActiveTab}
             onRefreshAttendance={handleRefreshAttendance}
+            onSaveAttendance={handleSaveAttendanceRecords}
           />
         );
       case 'sites':
